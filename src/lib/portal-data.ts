@@ -92,23 +92,78 @@ export const REGISTERED_COURSES = Array.from(
   }, new Map<string, { course: string; lecturer: string; kinds: Set<SlotKind>; weeklyHours: number }>()).values(),
 );
 
+import { STUDENT_PROFILE } from "./accounts.functions";
+import { getDemoSession } from "./session";
+
+export const DEFAULT_DOCUMENTS = [
+  {
+    id: "doc-1",
+    title: "طلب الالتحاق الخاص بالطالب",
+    description: "نموذج طلب الالتحاق المقدم إلى كلية الهندسة",
+    file_path: null,
+    file_name: null,
+    file_size: null,
+    is_available: true,
+    sort_order: 1,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  },
+  {
+    id: "doc-2",
+    title: "جدول الحضور الخاص بالطالب",
+    description: "الجدول الأسبوعي للمحاضرات والسكاشن — الفصل الدراسي الأول",
+    file_path: null,
+    file_name: null,
+    file_size: null,
+    is_available: true,
+    sort_order: 2,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  },
+  {
+    id: "doc-3",
+    title: "جدول امتحانات منتصف الفصل الدراسي الأول",
+    description: "مواعيد اختبارات منتصف الفصل الدراسي الأول",
+    file_path: null,
+    file_name: null,
+    file_size: null,
+    is_available: true,
+    sort_order: 3,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  },
+];
+
 export const profileQuery = queryOptions({
   queryKey: ["profile"],
   queryFn: async () => {
-    const { data: u } = await supabase.auth.getUser();
-    if (!u.user) throw new Error("not signed in");
-    const { data, error } = await supabase.from("student_profiles").select("*").eq("user_id", u.user.id).maybeSingle();
-    if (error) throw error;
-    return data;
+    const demo = getDemoSession();
+    if (demo && demo.role === "student") {
+      return STUDENT_PROFILE;
+    }
+    try {
+      const { data: u } = await supabase.auth.getUser();
+      if (u?.user) {
+        const { data, error } = await supabase.from("student_profiles").select("*").eq("user_id", u.user.id).maybeSingle();
+        if (!error && data) return data;
+      }
+    } catch {
+      // fallback below
+    }
+    return STUDENT_PROFILE;
   },
 });
 
 export const documentsQuery = queryOptions({
   queryKey: ["documents"],
   queryFn: async () => {
-    const { data, error } = await supabase.from("documents").select("*").order("sort_order");
-    if (error) throw error;
-    return data;
+    try {
+      const { data, error } = await supabase.from("documents").select("*").order("sort_order");
+      if (!error && data && data.length > 0) return data;
+    } catch {
+      // fallback below
+    }
+    return DEFAULT_DOCUMENTS;
   },
 });
 

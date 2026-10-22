@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { LoginCard } from "@/components/portal/LoginCard";
-import { portalSignIn, fetchRoles } from "@/lib/session";
+import { portalSignIn, fetchRoles, type Role } from "@/lib/session";
 import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/")({
@@ -27,8 +27,13 @@ function Login() {
       onSubmit={async (u, p) => {
         const { error } = await portalSignIn(u, p);
         if (error) return error;
-        const { data } = await supabase.auth.getUser();
-        const roles = data.user ? await fetchRoles(data.user.id) : [];
+        let roles: Role[] = [];
+        try {
+          const { data } = await supabase.auth.getUser();
+          roles = await fetchRoles(data?.user?.id);
+        } catch {
+          roles = await fetchRoles();
+        }
         navigate({ to: roles.includes("admin") && !roles.includes("student") ? "/admin" : "/portal" });
         return null;
       }}

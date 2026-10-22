@@ -16,6 +16,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { clearDemoSession } from "@/lib/session";
 import { cn } from "@/lib/utils";
 
 export type NavItem = { to: string; label: string; icon: LucideIcon };
@@ -60,7 +61,8 @@ export function Shell({
   async function signOut() {
     await qc.cancelQueries();
     qc.clear();
-    await supabase.auth.signOut();
+    clearDemoSession();
+    await supabase.auth.signOut().catch(() => {});
     navigate({ to: signOutTo, replace: true });
   }
 
