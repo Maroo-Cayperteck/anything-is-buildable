@@ -41,7 +41,23 @@ function AdminLogin() {
         navigate({ to: "/admin" });
         return null;
       }}
-      footer={<Link to="/" className="text-primary hover:underline">العودة لدخول الطلاب</Link>}
+      footer={
+        <div className="space-y-3">
+          <Link to="/" className="inline-block text-xs font-semibold text-primary hover:underline">
+            العودة لدخول الطلاب
+          </Link>
+          <div className="border-t pt-2">
+            <a
+              href="https://www.facebook.com/share/1C1AG6nnue/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+            >
+              جامعة حلوان الأهلية — Helwan National University
+            </a>
+          </div>
+        </div>
+      }
     />
   );
 }

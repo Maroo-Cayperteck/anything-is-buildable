@@ -5,12 +5,12 @@ import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/")({
   ssr: false,
-  head: () => ({
+      head: () => ({
     meta: [
-      { title: "تسجيل الدخول — بوابة الطالب" },
-      { name: "description", content: "تسجيل الدخول إلى بوابة الطالب التجريبية لعرض البيانات الأكاديمية والملفات." },
-      { property: "og:title", content: "تسجيل الدخول — بوابة الطالب" },
-      { property: "og:description", content: "محاكاة تعليمية لبوابة طالب جامعي." },
+      { title: "تسجيل الدخول — جامعة حلوان الأهلية" },
+      { name: "description", content: "تسجيل الدخول إلى نظام معلومات الطلاب — جامعة حلوان الأهلية (Helwan National University)" },
+      { property: "og:title", content: "تسجيل الدخول — جامعة حلوان الأهلية" },
+      { property: "og:description", content: "بوابة نظام معلومات الطلاب — جامعة حلوان الأهلية" },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],
@@ -38,11 +38,23 @@ function Login() {
         return null;
       }}
       footer={
-        <>
-          <div className="font-semibold text-foreground/70">بوابة الطالب — نظام معلومات الطلاب</div>
-          <div className="mt-1">نسخة تجريبية لأغراض العرض والاختبار</div>
-          <Link to="/admin-login" className="mt-3 inline-block text-primary hover:underline">دخول المسؤول</Link>
-        </>
+        <div className="space-y-3">
+          <a
+            href="https://www.facebook.com/share/1C1AG6nnue/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="group block transition-opacity hover:opacity-90"
+            title="الصفحة الرسمية لجامعة حلوان الأهلية"
+          >
+            <div className="text-sm font-bold text-foreground">Helwan National University</div>
+            <div className="mt-0.5 text-xs font-medium text-muted-foreground">Student Information System</div>
+          </a>
+          <div className="pt-1">
+            <Link to="/admin-login" className="inline-block text-xs font-semibold text-primary hover:underline">
+              دخول المسؤول
+            </Link>
+          </div>
+        </div>
       }
     />
   );

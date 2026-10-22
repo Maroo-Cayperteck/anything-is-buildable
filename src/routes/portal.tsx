@@ -20,7 +20,7 @@ function PortalLayout() {
 
   const current =
     [...STUDENT_NAV].reverse().find((n) => (n.to === "/portal" ? path.replace(/\/$/, "") === "/portal" : path.startsWith(n.to))) ??
-    STUDENT_NAV[0];
+    STUDENT_NAV[0]!;
   const p = profile.data;
 
   return (

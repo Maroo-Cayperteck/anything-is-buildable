@@ -18,7 +18,10 @@ export default function PdfViewer({ url }: { url: string }) {
   useEffect(() => {
     const el = box.current;
     if (!el) return;
-    const ro = new ResizeObserver(([e]) => setWidth(Math.min(e.contentRect.width - 32, 1000)));
+    const ro = new ResizeObserver((entries) => {
+      const e = entries[0];
+      if (e) setWidth(Math.min(e.contentRect.width - 32, 1000));
+    });
     ro.observe(el);
     return () => ro.disconnect();
   }, []);

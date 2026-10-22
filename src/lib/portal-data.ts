@@ -48,7 +48,7 @@ export const GPA_SCALE = [
   ["C", "2.00", "65 – 69"],
   ["D", "1.00", "60 – 64"],
   ["F", "0.00", "< 60"],
-];
+] as const;
 
 export type SlotKind = "lecture" | "section" | "lab";
 export type Slot = { day: string; dayAr: string; start: number; end: number; kind: SlotKind; course: string; staff: string; room: string };
@@ -154,27 +154,16 @@ export const profileQuery = queryOptions({
   },
 });
 
+import { fetchAllDocuments, resolveDocumentUrl, BUCKET } from "./documents-storage";
+export { BUCKET };
+
 export const documentsQuery = queryOptions({
   queryKey: ["documents"],
-  queryFn: async () => {
-    try {
-      const { data, error } = await supabase.from("documents").select("*").order("sort_order");
-      if (!error && data && data.length > 0) return data;
-    } catch {
-      // fallback below
-    }
-    return DEFAULT_DOCUMENTS;
-  },
+  queryFn: () => fetchAllDocuments(),
 });
 
-export const BUCKET = "student-documents";
-
 export async function signedUrl(path: string, download?: string) {
-  const { data, error } = await supabase.storage
-    .from(BUCKET)
-    .createSignedUrl(path, 60 * 30, download ? { download } : undefined);
-  if (error) throw error;
-  return data.signedUrl;
+  return resolveDocumentUrl(path, download);
 }
 
 export function formatSize(bytes?: number | null) {
