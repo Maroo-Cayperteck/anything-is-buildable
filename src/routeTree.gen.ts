@@ -10,33 +10,132 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as PortalRouteImport } from './routes/portal'
+import { Route as PortalIndexRouteImport } from './routes/portal.index'
+import { Route as PortalCoursesRouteImport } from './routes/portal.courses'
+import { Route as PortalDocumentsRouteImport } from './routes/portal.documents'
+import { Route as PortalGradesRouteImport } from './routes/portal.grades'
+import { Route as PortalInfoRouteImport } from './routes/portal.info'
+import { Route as PortalRegistrationRouteImport } from './routes/portal.registration'
+import { Route as PortalViewerDocIdRouteImport } from './routes/portal.viewer.$docId'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PortalRoute = PortalRouteImport.update({
+  id: '/portal',
+  path: '/portal',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PortalIndexRoute = PortalIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => PortalRoute,
+} as any)
+const PortalCoursesRoute = PortalCoursesRouteImport.update({
+  id: '/courses',
+  path: '/courses',
+  getParentRoute: () => PortalRoute,
+} as any)
+const PortalDocumentsRoute = PortalDocumentsRouteImport.update({
+  id: '/documents',
+  path: '/documents',
+  getParentRoute: () => PortalRoute,
+} as any)
+const PortalGradesRoute = PortalGradesRouteImport.update({
+  id: '/grades',
+  path: '/grades',
+  getParentRoute: () => PortalRoute,
+} as any)
+const PortalInfoRoute = PortalInfoRouteImport.update({
+  id: '/info',
+  path: '/info',
+  getParentRoute: () => PortalRoute,
+} as any)
+const PortalRegistrationRoute = PortalRegistrationRouteImport.update({
+  id: '/registration',
+  path: '/registration',
+  getParentRoute: () => PortalRoute,
+} as any)
+const PortalViewerDocIdRoute = PortalViewerDocIdRouteImport.update({
+  id: '/viewer/$docId',
+  path: '/viewer/$docId',
+  getParentRoute: () => PortalRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/portal': typeof PortalRouteWithChildren
+  '/portal/courses': typeof PortalCoursesRoute
+  '/portal/documents': typeof PortalDocumentsRoute
+  '/portal/grades': typeof PortalGradesRoute
+  '/portal/info': typeof PortalInfoRoute
+  '/portal/registration': typeof PortalRegistrationRoute
+  '/portal/': typeof PortalIndexRoute
+  '/portal/viewer/$docId': typeof PortalViewerDocIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/portal/courses': typeof PortalCoursesRoute
+  '/portal/documents': typeof PortalDocumentsRoute
+  '/portal/grades': typeof PortalGradesRoute
+  '/portal/info': typeof PortalInfoRoute
+  '/portal/registration': typeof PortalRegistrationRoute
+  '/portal': typeof PortalIndexRoute
+  '/portal/viewer/$docId': typeof PortalViewerDocIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/portal': typeof PortalRouteWithChildren
+  '/portal/courses': typeof PortalCoursesRoute
+  '/portal/documents': typeof PortalDocumentsRoute
+  '/portal/grades': typeof PortalGradesRoute
+  '/portal/info': typeof PortalInfoRoute
+  '/portal/registration': typeof PortalRegistrationRoute
+  '/portal/': typeof PortalIndexRoute
+  '/portal/viewer/$docId': typeof PortalViewerDocIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/portal'
+    | '/portal/courses'
+    | '/portal/documents'
+    | '/portal/grades'
+    | '/portal/info'
+    | '/portal/registration'
+    | '/portal/'
+    | '/portal/viewer/$docId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/'
+    | '/portal/courses'
+    | '/portal/documents'
+    | '/portal/grades'
+    | '/portal/info'
+    | '/portal/registration'
+    | '/portal'
+    | '/portal/viewer/$docId'
+  id:
+    | '__root__'
+    | '/'
+    | '/portal'
+    | '/portal/courses'
+    | '/portal/documents'
+    | '/portal/grades'
+    | '/portal/info'
+    | '/portal/registration'
+    | '/portal/'
+    | '/portal/viewer/$docId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  PortalRoute: typeof PortalRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
@@ -48,11 +147,91 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/portal': {
+      id: '/portal'
+      path: '/portal'
+      fullPath: '/portal'
+      preLoaderRoute: typeof PortalRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/portal/': {
+      id: '/portal/'
+      path: '/'
+      fullPath: '/portal/'
+      preLoaderRoute: typeof PortalIndexRouteImport
+      parentRoute: typeof PortalRoute
+    }
+    '/portal/courses': {
+      id: '/portal/courses'
+      path: '/courses'
+      fullPath: '/portal/courses'
+      preLoaderRoute: typeof PortalCoursesRouteImport
+      parentRoute: typeof PortalRoute
+    }
+    '/portal/documents': {
+      id: '/portal/documents'
+      path: '/documents'
+      fullPath: '/portal/documents'
+      preLoaderRoute: typeof PortalDocumentsRouteImport
+      parentRoute: typeof PortalRoute
+    }
+    '/portal/grades': {
+      id: '/portal/grades'
+      path: '/grades'
+      fullPath: '/portal/grades'
+      preLoaderRoute: typeof PortalGradesRouteImport
+      parentRoute: typeof PortalRoute
+    }
+    '/portal/info': {
+      id: '/portal/info'
+      path: '/info'
+      fullPath: '/portal/info'
+      preLoaderRoute: typeof PortalInfoRouteImport
+      parentRoute: typeof PortalRoute
+    }
+    '/portal/registration': {
+      id: '/portal/registration'
+      path: '/registration'
+      fullPath: '/portal/registration'
+      preLoaderRoute: typeof PortalRegistrationRouteImport
+      parentRoute: typeof PortalRoute
+    }
+    '/portal/viewer/$docId': {
+      id: '/portal/viewer/$docId'
+      path: '/viewer/$docId'
+      fullPath: '/portal/viewer/$docId'
+      preLoaderRoute: typeof PortalViewerDocIdRouteImport
+      parentRoute: typeof PortalRoute
+    }
   }
 }
 
+interface PortalRouteChildren {
+  PortalCoursesRoute: typeof PortalCoursesRoute
+  PortalDocumentsRoute: typeof PortalDocumentsRoute
+  PortalGradesRoute: typeof PortalGradesRoute
+  PortalInfoRoute: typeof PortalInfoRoute
+  PortalRegistrationRoute: typeof PortalRegistrationRoute
+  PortalIndexRoute: typeof PortalIndexRoute
+  PortalViewerDocIdRoute: typeof PortalViewerDocIdRoute
+}
+
+const PortalRouteChildren: PortalRouteChildren = {
+  PortalCoursesRoute: PortalCoursesRoute,
+  PortalDocumentsRoute: PortalDocumentsRoute,
+  PortalGradesRoute: PortalGradesRoute,
+  PortalInfoRoute: PortalInfoRoute,
+  PortalRegistrationRoute: PortalRegistrationRoute,
+  PortalIndexRoute: PortalIndexRoute,
+  PortalViewerDocIdRoute: PortalViewerDocIdRoute,
+}
+
+const PortalRouteWithChildren =
+  PortalRoute._addFileChildren(PortalRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  PortalRoute: PortalRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
