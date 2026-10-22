@@ -1,24 +1,44 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { LoginCard } from "@/components/portal/LoginCard";
+import { portalSignIn, fetchRoles } from "@/lib/session";
+import { supabase } from "@/integrations/supabase/client";
 
-// No head() here: the home route inherits title/description/og/twitter from
-// __root.tsx, and ships no og:image so serve-time hosting can inject the
-// project's social preview (explicit og:image or latest screenshot).
 export const Route = createFileRoute("/")({
-  component: Index,
+  ssr: false,
+  head: () => ({
+    meta: [
+      { title: "تسجيل الدخول — بوابة الطالب" },
+      { name: "description", content: "تسجيل الدخول إلى بوابة الطالب التجريبية لعرض البيانات الأكاديمية والملفات." },
+      { property: "og:title", content: "تسجيل الدخول — بوابة الطالب" },
+      { property: "og:description", content: "محاكاة تعليمية لبوابة طالب جامعي." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
+    ],
+  }),
+  component: Login,
 });
 
-// IMPORTANT: Replace this placeholder. See ./README.md for routing conventions.
-function Index() {
+function Login() {
+  const navigate = useNavigate();
   return (
-    <div
-      className="flex min-h-screen items-center justify-center"
-      style={{ backgroundColor: "#fcfbf8" }}
-    >
-      <img
-        data-lovable-blank-page-placeholder="REMOVE_THIS"
-        src="https://cdn.gpteng.co/blank-app-v1.svg"
-        alt="Your app will live here!"
-      />
-    </div>
+    <LoginCard
+      title="مرحبًا بعودتك"
+      subtitle="سجّل الدخول إلى بوابة الطالب"
+      onSubmit={async (u, p) => {
+        const { error } = await portalSignIn(u, p);
+        if (error) return error;
+        const { data } = await supabase.auth.getUser();
+        const roles = data.user ? await fetchRoles(data.user.id) : [];
+        navigate({ to: roles.includes("admin") && !roles.includes("student") ? "/admin" : "/portal" });
+        return null;
+      }}
+      footer={
+        <>
+          <div className="font-semibold text-foreground/70">بوابة الطالب — نظام معلومات الطلاب</div>
+          <div className="mt-1">نسخة تجريبية لأغراض العرض والاختبار</div>
+          <Link to="/admin-login" className="mt-3 inline-block text-primary hover:underline">دخول المسؤول</Link>
+        </>
+      }
+    />
   );
 }
