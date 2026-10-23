@@ -138,7 +138,18 @@ export function saveLocalDocuments(docs: Doc[]): void {
   try {
     localStorage.setItem(DOCS_STORAGE_KEY, JSON.stringify(docs));
   } catch (err) {
-    console.warn("Failed to persist documents to localStorage", err);
+    // If quota is exceeded, try to save a minimal version (just metadata, no large fields)
+    if (err instanceof DOMException && err.name === "QuotaExceededError") {
+      try {
+        // Store minimal document list without large data
+        const minimal = docs.map((d) => ({ ...d, description: d.description?.slice(0, 100) }));
+        localStorage.setItem(DOCS_STORAGE_KEY, JSON.stringify(minimal));
+      } catch {
+        console.warn("localStorage quota exceeded even for minimal documents", err);
+      }
+    } else {
+      console.warn("Failed to persist documents to localStorage", err);
+    }
   }
 }
 
