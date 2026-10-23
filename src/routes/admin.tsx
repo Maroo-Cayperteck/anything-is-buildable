@@ -54,7 +54,7 @@ function DocumentManager() {
   async function addDoc() {
     const max = Math.max(0, ...(data ?? []).map((d) => d.sort_order));
     const { error } = await supabase.from("documents").insert({ title: "ملف جديد", description: "", sort_order: max + 1, is_available: false });
-    if (error) { toast.error("تعذر إضافة الملف");
+    if (error) { toast.error("تعذر إضافة الملف"); return; }
     toast.success("تمت إضافة تصنيف جديد");
     refresh();
   }
@@ -75,14 +75,14 @@ function DocumentManager() {
     if (d.file_path) await supabase.storage.from(BUCKET).remove([d.file_path]);
     const { error } = await supabase.from("documents").delete().eq("id", d.id);
     setToDelete(null);
-    if (error) { toast.error("تعذر الحذف");
+    if (error) { toast.error("تعذر الحذف"); return; }
     toast.success("تم حذف الملف");
     refresh();
   }
 
   function stageUpload(d: Doc, file: File) {
-    if (file.type !== "application/pdf" || !file.name.toLowerCase().endsWith(".pdf")) { toast.error("يُسمح بملفات PDF فقط");
-    if (file.size > MAX) { toast.error("الحد الأقصى لحجم الملف 20 ميجابايت");
+    if (file.type !== "application/pdf" || !file.name.toLowerCase().endsWith(".pdf")) { toast.error("يُسمح بملفات PDF فقط"); return; }
+    if (file.size > MAX) { toast.error("الحد الأقصى لحجم الملف 20 ميجابايت"); return; }
     const url = URL.createObjectURL(file);
     setPreview({
       title: `معاينة قبل النشر — ${d.title}`,
@@ -176,18 +176,18 @@ function DocRow({ doc, first, last, onMove, onDelete, onUpload, onView, onSaved 
   const dirty = title !== doc.title || desc !== (doc.description ?? "");
 
   async function save() {
-    if (!title.trim()) { toast.error("العنوان مطلوب");
+    if (!title.trim()) { toast.error("العنوان مطلوب"); return; }
     setSaving(true);
     const { error } = await supabase.from("documents").update({ title: title.trim().slice(0, 200), description: desc.trim().slice(0, 1000) }).eq("id", doc.id);
     setSaving(false);
-    if (error) { toast.error("تعذر الحفظ");
+    if (error) { toast.error("تعذر الحفظ"); return; }
     toast.success("تم حفظ التعديلات");
     onSaved();
   }
 
   async function toggle(v: boolean) {
     const { error } = await supabase.from("documents").update({ is_available: v }).eq("id", doc.id);
-    if (error) { toast.error("تعذر تغيير الحالة");
+    if (error) { toast.error("تعذر تغيير الحالة"); return; }
     onSaved();
   }
 
