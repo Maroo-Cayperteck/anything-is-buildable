@@ -93,15 +93,23 @@ export function Shell({
   const initials = userName.split(" ").slice(0, 2).map((w) => w[0]).join("");
 
   return (
-    <div dir="ltr" className="flex min-h-screen w-full">
-      {open && <div className="fixed inset-0 z-30 bg-foreground/40 lg:hidden" onClick={() => setOpen(false)} />}
+    <div dir="ltr" className="flex min-h-screen w-full overflow-x-hidden">
+      <div
+        aria-hidden
+        className={cn(
+          "fixed inset-0 z-30 bg-foreground/40 transition-opacity duration-300 lg:hidden",
+          open ? "opacity-100" : "pointer-events-none opacity-0",
+        )}
+        onClick={() => setOpen(false)}
+      />
       <aside
         dir="rtl"
         className={cn(
-          "fixed inset-y-0 left-0 z-40 flex w-72 flex-col bg-sidebar text-sidebar-foreground transition-transform duration-300 lg:sticky lg:top-0 lg:h-screen lg:translate-x-0",
+          "fixed inset-y-0 left-0 z-40 flex w-72 shrink-0 flex-col overflow-hidden bg-sidebar text-sidebar-foreground transition-all duration-300 ease-in-out lg:sticky lg:top-0 lg:h-screen lg:translate-x-0",
           open ? "translate-x-0" : "-translate-x-full",
+          collapsed && "lg:w-0",
         )}
-      >
+      ><div className="flex h-full w-72 flex-col">
         <div className="flex items-center gap-3 border-b border-sidebar-border px-5 py-5">
           <a
             href="https://www.facebook.com/share/1C1AG6nnue/"
@@ -146,11 +154,16 @@ export function Shell({
         >
           <LogOut className="h-5 w-5" /> تسجيل الخروج
         </button>
-      </aside>
+      </div></aside>
 
       <div dir="rtl" className="flex min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-20 flex h-16 items-center gap-4 border-b bg-card/95 px-4 backdrop-blur md:px-8">
-          <button className="lg:hidden" aria-label="فتح القائمة" onClick={() => setOpen(true)}>
+          <button
+            className="grid h-10 w-10 shrink-0 place-items-center rounded-lg text-foreground transition-colors hover:bg-secondary"
+            aria-label="القائمة"
+            aria-expanded={open || !collapsed}
+            onClick={toggleMenu}
+          >
             <Menu className="h-5 w-5" />
           </button>
           <h1 className="text-lg font-bold">{title}</h1>
