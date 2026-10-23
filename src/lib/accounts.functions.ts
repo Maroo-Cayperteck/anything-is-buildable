@@ -62,9 +62,11 @@ export const ensureDemoAccount = createServerFn({ method: "POST" })
       if (error) throw new Error("تعذر تجهيز الحساب");
       user = created.user!;
     }
-    await supabaseAdmin.from("user_roles").upsert({ user_id: user.id, role: account.role }, { onConflict: "user_id,role" });
+    const r1 = await supabaseAdmin.from("user_roles").upsert({ user_id: user.id, role: account.role }, { onConflict: "user_id,role" });
+    if (r1.error) console.error("role upsert", r1.error);
     if (account.role === "student") {
-      await supabaseAdmin.from("student_profiles").upsert({ user_id: user.id, ...STUDENT_PROFILE }, { onConflict: "user_id" });
+      const r2 = await supabaseAdmin.from("student_profiles").upsert({ user_id: user.id, ...STUDENT_PROFILE }, { onConflict: "user_id" });
+      if (r2.error) console.error("profile upsert", r2.error);
     }
     return { ok: true as const };
   });
