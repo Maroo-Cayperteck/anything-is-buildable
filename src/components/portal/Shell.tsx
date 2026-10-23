@@ -1,5 +1,5 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   BookOpen,
@@ -16,6 +16,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { clearDemoSession } from "@/lib/session";
 import { cn } from "@/lib/utils";
 
 export type NavItem = { to: string; label: string; icon: LucideIcon };
@@ -31,8 +32,19 @@ export const STUDENT_NAV: NavItem[] = [
 
 export function BrandMark({ className }: { className?: string }) {
   return (
-    <div className={cn("grid h-11 w-11 place-items-center rounded-xl bg-brand text-primary-foreground shadow-card", className)}>
-      <GraduationCap className="h-6 w-6" />
+    <div
+      className={cn(
+        "relative flex h-11 w-11 shrink-0 select-none items-center justify-center rounded-2xl font-black text-white shadow-card transition-transform group-hover:scale-105",
+        className,
+      )}
+      style={{
+        backgroundColor: "#1e3a5f",
+        boxShadow: "0 4px 14px rgba(30, 58, 95, 0.28)",
+      }}
+    >
+      <span className="font-sans text-[0.95rem] font-black tracking-tight leading-none text-white drop-shadow-sm">
+        HNU
+      </span>
     </div>
   );
 }
@@ -48,19 +60,32 @@ export function Shell({
   nav: NavItem[];
   title: string;
   userName: string;
-  userTag?: string | undefined;
+  userTag?: string | null | undefined;
   signOutTo: "/" | "/admin-login";
   children: ReactNode;
 }) {
   const path = useRouterState({ select: (s) => s.location.pathname.replace(/\/$/, "") || "/" });
   const [open, setOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  function toggleMenu() {
+    if (window.matchMedia("(min-width: 1024px)").matches) setCollapsed((c) => !c);
+    else setOpen((o) => !o);
+  }
   const navigate = useNavigate();
   const qc = useQueryClient();
 
   async function signOut() {
     await qc.cancelQueries();
     qc.clear();
-    await supabase.auth.signOut();
+    clearDemoSession();
+    await supabase.auth.signOut().catch(() => {});
     navigate({ to: signOutTo, replace: true });
   }
 
@@ -68,21 +93,37 @@ export function Shell({
   const initials = userName.split(" ").slice(0, 2).map((w) => w[0]).join("");
 
   return (
-    <div dir="ltr" className="flex min-h-screen w-full">
-      {open && <div className="fixed inset-0 z-30 bg-foreground/40 lg:hidden" onClick={() => setOpen(false)} />}
+    <div dir="ltr" className="flex min-h-screen w-full overflow-x-hidden">
+      <div
+        aria-hidden
+        className={cn(
+          "fixed inset-0 z-30 bg-foreground/40 transition-opacity duration-300 lg:hidden",
+          open ? "opacity-100" : "pointer-events-none opacity-0",
+        )}
+        onClick={() => setOpen(false)}
+      />
       <aside
         dir="rtl"
         className={cn(
-          "fixed inset-y-0 left-0 z-40 flex w-72 flex-col bg-sidebar text-sidebar-foreground transition-transform duration-300 lg:sticky lg:top-0 lg:h-screen lg:translate-x-0",
+          "fixed inset-y-0 left-0 z-40 flex w-72 shrink-0 flex-col overflow-hidden bg-sidebar text-sidebar-foreground transition-all duration-300 ease-in-out lg:sticky lg:top-0 lg:h-screen lg:translate-x-0",
           open ? "translate-x-0" : "-translate-x-full",
+          collapsed && "lg:w-0",
         )}
-      >
+      ><div className="flex h-full w-72 flex-col">
         <div className="flex items-center gap-3 border-b border-sidebar-border px-5 py-5">
-          <BrandMark className="bg-sidebar-accent" />
-          <div className="min-w-0">
-            <div className="font-bold">بوابة الطالب</div>
-            <div className="text-xs text-sidebar-muted">نسخة تجريبية للعرض</div>
-          </div>
+          <a
+            href="https://www.facebook.com/share/1C1AG6nnue/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="group flex items-center gap-3 transition-opacity hover:opacity-90"
+            title="الصفحة الرسمية لجامعة حلوان الأهلية"
+          >
+            <BrandMark className="h-10 w-10 rounded-xl" />
+            <div className="min-w-0">
+              <div className="font-bold text-sm text-sidebar-foreground">جامعة حلوان الأهلية</div>
+              <div className="text-[0.7rem] text-sidebar-muted">Helwan National University</div>
+            </div>
+          </a>
           <button className="mr-auto lg:hidden" aria-label="إغلاق القائمة" onClick={() => setOpen(false)}>
             <X className="h-5 w-5" />
           </button>
@@ -113,11 +154,16 @@ export function Shell({
         >
           <LogOut className="h-5 w-5" /> تسجيل الخروج
         </button>
-      </aside>
+      </div></aside>
 
       <div dir="rtl" className="flex min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-20 flex h-16 items-center gap-4 border-b bg-card/95 px-4 backdrop-blur md:px-8">
-          <button className="lg:hidden" aria-label="فتح القائمة" onClick={() => setOpen(true)}>
+          <button
+            className="grid h-10 w-10 shrink-0 place-items-center rounded-lg text-foreground transition-colors hover:bg-secondary"
+            aria-label="القائمة"
+            aria-expanded={open || !collapsed}
+            onClick={toggleMenu}
+          >
             <Menu className="h-5 w-5" />
           </button>
           <h1 className="text-lg font-bold">{title}</h1>
@@ -135,7 +181,14 @@ export function Shell({
           {children}
         </main>
         <footer className="px-8 pb-6 text-center text-xs text-muted-foreground">
-          محاكاة تعليمية لبوابة طالب — البيانات المعروضة لأغراض العرض والاختبار فقط
+          <a
+            href="https://www.facebook.com/share/1C1AG6nnue/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 hover:text-primary transition-colors font-medium"
+          >
+            <span>جامعة حلوان الأهلية — Helwan National University © {new Date().getFullYear()}</span>
+          </a>
         </footer>
       </div>
     </div>
@@ -167,7 +220,16 @@ export function Field({ label, value, mono }: { label: string; value?: ReactNode
 }
 
 export function SampleBadge() {
-  return <span className="rounded-full bg-warning-soft px-2.5 py-0.5 text-xs font-medium text-warning">بيانات تجريبية</span>;
+  return (
+    <a
+      href="https://www.facebook.com/share/1C1AG6nnue/"
+      target="_blank"
+      rel="noopener noreferrer"
+      className="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary hover:underline"
+    >
+      جامعة حلوان الأهلية
+    </a>
+  );
 }
 
 export function GradePill({ grade }: { grade: string }) {

@@ -23,7 +23,7 @@ export function LoginCard({
 }) {
   const [show, setShow] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [errors, setErrors] = useState<{ username?: string | undefined; password?: string | undefined; form?: string | undefined }>({});
+  const [errors, setErrors] = useState<{ username?: string; password?: string; form?: string }>({});
 
   async function handle(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -31,7 +31,10 @@ export function LoginCard({
     const parsed = schema.safeParse({ username: fd.get("username"), password: fd.get("password") });
     if (!parsed.success) {
       const f = parsed.error.flatten().fieldErrors;
-      return setErrors({ username: f.username?.[0], password: f.password?.[0] });
+      const nextErrors: { username?: string; password?: string } = {};
+      if (f.username?.[0]) nextErrors.username = f.username[0];
+      if (f.password?.[0]) nextErrors.password = f.password[0];
+      return setErrors(nextErrors);
     }
     setErrors({});
     setBusy(true);
@@ -50,7 +53,15 @@ export function LoginCard({
     <div className="flex min-h-screen items-center justify-center bg-login p-4">
       <div className="page-enter w-full max-w-md rounded-2xl bg-card p-8 shadow-elevated sm:p-10">
         <div className="flex flex-col items-center text-center">
-          <BrandMark className="h-16 w-16 rounded-2xl" />
+          <a
+            href="https://www.facebook.com/share/1C1AG6nnue/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="group block transition-transform hover:scale-105"
+            title="جامعة حلوان الأهلية — Helwan National University"
+          >
+            <BrandMark className="h-16 w-16 rounded-2xl shadow-elevated" />
+          </a>
           <h1 className="mt-5 text-2xl font-bold">{title}</h1>
           <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>
         </div>

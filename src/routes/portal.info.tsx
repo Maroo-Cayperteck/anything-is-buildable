@@ -67,9 +67,18 @@ function Info() {
         </div>
       </Card>
 
-      <Card title="الأمان" icon={ShieldCheck}>
+      <Card title="الأمان وشؤون الطلاب" icon={ShieldCheck}>
         <p className="text-sm text-muted-foreground">
-          هذا حساب تجريبي مخصص للعرض. تغيير كلمة المرور غير متاح في وضع المحاكاة.
+          لتحديث البيانات الشخصية أو كلمة المرور، يرجى مراجعة إدارة شؤون الطلاب عبر{" "}
+          <a
+            href="https://www.facebook.com/share/1C1AG6nnue/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-medium text-primary underline"
+          >
+            الصفحة الرسمية لجامعة حلوان الأهلية
+          </a>
+          .
         </p>
       </Card>
     </div>

@@ -38,7 +38,7 @@ function Grades() {
         </button>
         {scaleOpen && (
           <div className="grid grid-cols-3 gap-2 border-t p-6 sm:grid-cols-5 lg:grid-cols-9">
-            {GPA_SCALE.map(([g = "", pts, range]) => (
+            {GPA_SCALE.map(([g, pts, range]) => (
               <div key={g} className="rounded-lg border p-3 text-center">
                 <GradePill grade={g} />
                 <div className="mt-2 font-mono text-sm font-bold">{pts}</div>

@@ -11,10 +11,16 @@ import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { LazyPdf } from "@/components/portal/LazyPdf";
-import { supabase } from "@/integrations/supabase/client";
 import { useRoleGate } from "@/lib/session";
-import { BUCKET, documentsQuery, formatSize, signedUrl } from "@/lib/portal-data";
-import type { Tables } from "@/integrations/supabase/types";
+import { documentsQuery, formatSize, signedUrl } from "@/lib/portal-data";
+import {
+  createDocument,
+  updateDocumentFields,
+  uploadAndPublishDocument,
+  deleteDocumentRecord,
+  reorderDocumentList,
+  type Doc,
+} from "@/lib/documents-storage";
 
 export const Route = createFileRoute("/admin")({
   ssr: false,
@@ -29,7 +35,6 @@ export const Route = createFileRoute("/admin")({
   component: Admin,
 });
 
-type Doc = Tables<"documents">;
 const MAX = 20 * 1024 * 1024;
 
 function Admin() {
@@ -52,48 +57,56 @@ function DocumentManager() {
   const refresh = () => qc.invalidateQueries({ queryKey: ["documents"] });
 
   async function addDoc() {
-    const max = Math.max(0, ...(data ?? []).map((d) => d.sort_order));
-    const { error } = await supabase.from("documents").insert({ title: "ملف جديد", description: "", sort_order: max + 1, is_available: false });
-    if (error) { toast.error("تعذر إضافة الملف"); return; }
-    toast.success("تمت إضافة تصنيف جديد");
-    refresh();
+    try {
+      await createDocument("ملف جديد", "");
+      toast.success("تمت إضافة تصنيف جديد بنجاح");
+      refresh();
+    } catch {
+      toast.error("تعذر إضافة الملف");
+    }
   }
 
   async function move(i: number, dir: -1 | 1) {
-    const list = data!;
-    const a = list[i], b = list[i + dir];
-    if (!a || !b) return;
-    await Promise.all([
-      supabase.from("documents").update({ sort_order: b.sort_order }).eq("id", a.id),
-      supabase.from("documents").update({ sort_order: a.sort_order }).eq("id", b.id),
-    ]);
+    if (!data) return;
+    const targetIdx = i + dir;
+    if (targetIdx < 0 || targetIdx >= data.length) return;
+    const next = [...data];
+    const temp = next[i];
+    const target = next[targetIdx];
+    if (!temp || !target) return;
+    next[i] = target;
+    next[targetIdx] = temp;
+    await reorderDocumentList(next);
     refresh();
   }
 
   async function confirmDelete() {
-    const d = toDelete!;
-    if (d.file_path) await supabase.storage.from(BUCKET).remove([d.file_path]);
-    const { error } = await supabase.from("documents").delete().eq("id", d.id);
-    setToDelete(null);
-    if (error) { toast.error("تعذر الحذف"); return; }
-    toast.success("تم حذف الملف");
-    refresh();
+    if (!toDelete) return;
+    try {
+      await deleteDocumentRecord(toDelete);
+      setToDelete(null);
+      toast.success("تم حذف الملف بنجاح");
+      refresh();
+    } catch {
+      toast.error("تعذر الحذف");
+    }
   }
 
   function stageUpload(d: Doc, file: File) {
-    if (file.type !== "application/pdf" || !file.name.toLowerCase().endsWith(".pdf")) { toast.error("يُسمح بملفات PDF فقط"); return; }
-    if (file.size > MAX) { toast.error("الحد الأقصى لحجم الملف 20 ميجابايت"); return; }
+    if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
+      toast.error("يُسمح بملفات PDF فقط");
+      return;
+    }
+    if (file.size > MAX) {
+      toast.error("الحد الأقصى لحجم الملف 20 ميجابايت");
+      return;
+    }
     const url = URL.createObjectURL(file);
     setPreview({
       title: `معاينة قبل النشر — ${d.title}`,
       url,
       onPublish: async () => {
-        const path = `docs/${d.id}/${Date.now()}.pdf`;
-        const up = await supabase.storage.from(BUCKET).upload(path, file, { contentType: "application/pdf" });
-        if (up.error) throw up.error;
-        const { error } = await supabase.from("documents").update({ file_path: path, file_name: file.name, file_size: file.size }).eq("id", d.id);
-        if (error) throw error;
-        if (d.file_path) await supabase.storage.from(BUCKET).remove([d.file_path]);
+        await uploadAndPublishDocument(d.id, file);
       },
     });
   }
@@ -103,7 +116,7 @@ function DocumentManager() {
     setPublishing(true);
     try {
       await preview.onPublish();
-      toast.success("تم نشر الملف بنجاح");
+      toast.success("تم نشر الملف بنجاح وحفظه للطلاب");
       URL.revokeObjectURL(preview.url);
       setPreview(null);
       refresh();
@@ -115,8 +128,10 @@ function DocumentManager() {
   }
 
   async function viewCurrent(d: Doc) {
+    if (!d.file_path) return;
     try {
-      setPreview({ title: d.title, url: await signedUrl(d.file_path!) });
+      const url = await signedUrl(d.file_path);
+      setPreview({ title: d.title, url });
     } catch {
       toast.error("تعذر فتح الملف");
     }
@@ -176,19 +191,33 @@ function DocRow({ doc, first, last, onMove, onDelete, onUpload, onView, onSaved 
   const dirty = title !== doc.title || desc !== (doc.description ?? "");
 
   async function save() {
-    if (!title.trim()) { toast.error("العنوان مطلوب"); return; }
+    if (!title.trim()) {
+      toast.error("العنوان مطلوب");
+      return;
+    }
     setSaving(true);
-    const { error } = await supabase.from("documents").update({ title: title.trim().slice(0, 200), description: desc.trim().slice(0, 1000) }).eq("id", doc.id);
-    setSaving(false);
-    if (error) { toast.error("تعذر الحفظ"); return; }
-    toast.success("تم حفظ التعديلات");
-    onSaved();
+    try {
+      await updateDocumentFields(doc.id, {
+        title: title.trim().slice(0, 200),
+        description: desc.trim().slice(0, 1000),
+      });
+      toast.success("تم حفظ التعديلات");
+      onSaved();
+    } catch {
+      toast.error("تعذر الحفظ");
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function toggle(v: boolean) {
-    const { error } = await supabase.from("documents").update({ is_available: v }).eq("id", doc.id);
-    if (error) { toast.error("تعذر تغيير الحالة"); return; }
-    onSaved();
+    try {
+      await updateDocumentFields(doc.id, { is_available: v });
+      toast.success(v ? "الملف متاح للطلاب الآن" : "تم إخفاء الملف عن الطلاب");
+      onSaved();
+    } catch {
+      toast.error("تعذر تغيير الحالة");
+    }
   }
 
   return (
