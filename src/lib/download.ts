@@ -6,7 +6,7 @@ export async function downloadDocument(path: string, fileName: string) {
     const url = await signedUrl(path, fileName);
     const a = document.createElement("a");
     a.href = url;
-    a.download = fileName;
+    a.download = fileName.toLowerCase().endsWith(".pdf") ? fileName : `${fileName}.pdf`;
     document.body.appendChild(a);
     a.click();
     a.remove();

@@ -16,6 +16,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { clearDemoSession } from "@/lib/session";
 import { cn } from "@/lib/utils";
 
 export type NavItem = { to: string; label: string; icon: LucideIcon };
@@ -31,8 +32,19 @@ export const STUDENT_NAV: NavItem[] = [
 
 export function BrandMark({ className }: { className?: string }) {
   return (
-    <div className={cn("grid h-11 w-11 place-items-center rounded-xl bg-brand text-primary-foreground shadow-card", className)}>
-      <GraduationCap className="h-6 w-6" />
+    <div
+      className={cn(
+        "relative flex h-11 w-11 shrink-0 select-none items-center justify-center rounded-2xl font-black text-white shadow-card transition-transform group-hover:scale-105",
+        className,
+      )}
+      style={{
+        backgroundColor: "#1e3a5f",
+        boxShadow: "0 4px 14px rgba(30, 58, 95, 0.28)",
+      }}
+    >
+      <span className="font-sans text-[0.95rem] font-black tracking-tight leading-none text-white drop-shadow-sm">
+        HNU
+      </span>
     </div>
   );
 }
@@ -48,7 +60,7 @@ export function Shell({
   nav: NavItem[];
   title: string;
   userName: string;
-  userTag?: string | undefined;
+  userTag?: string | null | undefined;
   signOutTo: "/" | "/admin-login";
   children: ReactNode;
 }) {
@@ -60,7 +72,8 @@ export function Shell({
   async function signOut() {
     await qc.cancelQueries();
     qc.clear();
-    await supabase.auth.signOut();
+    clearDemoSession();
+    await supabase.auth.signOut().catch(() => {});
     navigate({ to: signOutTo, replace: true });
   }
 
@@ -78,11 +91,19 @@ export function Shell({
         )}
       >
         <div className="flex items-center gap-3 border-b border-sidebar-border px-5 py-5">
-          <BrandMark className="bg-sidebar-accent" />
-          <div className="min-w-0">
-            <div className="font-bold">بوابة الطالب</div>
-            <div className="text-xs text-sidebar-muted">نسخة تجريبية للعرض</div>
-          </div>
+          <a
+            href="https://www.facebook.com/share/1C1AG6nnue/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="group flex items-center gap-3 transition-opacity hover:opacity-90"
+            title="الصفحة الرسمية لجامعة حلوان الأهلية"
+          >
+            <BrandMark className="h-10 w-10 rounded-xl" />
+            <div className="min-w-0">
+              <div className="font-bold text-sm text-sidebar-foreground">جامعة حلوان الأهلية</div>
+              <div className="text-[0.7rem] text-sidebar-muted">Helwan National University</div>
+            </div>
+          </a>
           <button className="mr-auto lg:hidden" aria-label="إغلاق القائمة" onClick={() => setOpen(false)}>
             <X className="h-5 w-5" />
           </button>
@@ -135,7 +156,14 @@ export function Shell({
           {children}
         </main>
         <footer className="px-8 pb-6 text-center text-xs text-muted-foreground">
-          محاكاة تعليمية لبوابة طالب — البيانات المعروضة لأغراض العرض والاختبار فقط
+          <a
+            href="https://www.facebook.com/share/1C1AG6nnue/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 hover:text-primary transition-colors font-medium"
+          >
+            <span>جامعة حلوان الأهلية — Helwan National University © {new Date().getFullYear()}</span>
+          </a>
         </footer>
       </div>
     </div>
@@ -167,7 +195,16 @@ export function Field({ label, value, mono }: { label: string; value?: ReactNode
 }
 
 export function SampleBadge() {
-  return <span className="rounded-full bg-warning-soft px-2.5 py-0.5 text-xs font-medium text-warning">بيانات تجريبية</span>;
+  return (
+    <a
+      href="https://www.facebook.com/share/1C1AG6nnue/"
+      target="_blank"
+      rel="noopener noreferrer"
+      className="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary hover:underline"
+    >
+      جامعة حلوان الأهلية
+    </a>
+  );
 }
 
 export function GradePill({ grade }: { grade: string }) {
