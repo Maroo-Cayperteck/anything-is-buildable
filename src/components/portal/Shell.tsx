@@ -1,5 +1,5 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   BookOpen,
@@ -66,6 +66,18 @@ export function Shell({
 }) {
   const path = useRouterState({ select: (s) => s.location.pathname.replace(/\/$/, "") || "/" });
   const [open, setOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  function toggleMenu() {
+    if (window.matchMedia("(min-width: 1024px)").matches) setCollapsed((c) => !c);
+    else setOpen((o) => !o);
+  }
   const navigate = useNavigate();
   const qc = useQueryClient();
 
