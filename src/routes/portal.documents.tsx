@@ -39,7 +39,7 @@ function DocumentCard({
     if (!d.file_path) return;
     setDownloading(true);
     try {
-      await downloadDocument(d.file_path, d.file_name ?? "document.pdf");
+      await downloadDocument(d.file_path, `${d.title}.pdf`);
     } catch {
       toast.error("تعذر تحميل الملف");
     } finally {
@@ -67,12 +67,14 @@ function DocumentCard({
 
       {has ? (
         <>
-          <div className="mt-4 flex flex-wrap gap-3 text-xs text-muted-foreground">
-            <span className="font-mono" dir="ltr">
-              {d.file_name}
-            </span>
-            <span>·</span>
-            <span dir="ltr">{formatSize(d.file_size)}</span>
+          <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            <span className="font-medium text-foreground/80">مستند PDF</span>
+            {d.file_size ? (
+              <>
+                <span>·</span>
+                <span dir="ltr">{formatSize(d.file_size)}</span>
+              </>
+            ) : null}
           </div>
           <div className="mt-auto grid grid-cols-2 gap-2 pt-5">
             {/* View button — opens inline PDF viewer */}

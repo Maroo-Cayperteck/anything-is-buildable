@@ -134,7 +134,7 @@ export function Shell({
           "fixed inset-y-0 left-0 z-40 flex flex-col transition-all duration-300 ease-in-out",
           mobileOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full",
           // Desktop styles: collapsible sidebar in layout flow
-          "lg:sticky lg:top-0 lg:h-screen lg:translate-x-0 lg:shadow-none",
+          "lg:sticky lg:top-0 lg:h-screen lg:translate-x-0 lg:shadow-none lg:shrink-0",
           desktopOpen
             ? "lg:w-72 lg:min-w-72 lg:max-w-72 lg:opacity-100"
             : "lg:w-0 lg:min-w-0 lg:max-w-0 lg:opacity-0 lg:pointer-events-none lg:overflow-hidden",

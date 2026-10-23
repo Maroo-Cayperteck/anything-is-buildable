@@ -37,7 +37,7 @@ function Viewer() {
     if (!doc?.file_path) return;
     setDownloading(true);
     try {
-      await downloadDocument(doc.file_path, doc.file_name ?? "document.pdf");
+      await downloadDocument(doc.file_path, `${doc.title}.pdf`);
     } catch {
       toast.error("تعذر تحميل الملف");
     } finally {
