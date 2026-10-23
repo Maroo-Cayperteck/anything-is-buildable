@@ -35,57 +35,26 @@ export function clearDemoSession() {
 
 export async function portalSignIn(username: string, password: string) {
   const trimmedUser = username.trim();
-  const isStudentDemo = trimmedUser === "30706232100316" && password === "925250059";
-  const isAdminDemo = trimmedUser.toLowerCase() === "admin" && (password === "admin" || password === "admin123");
+  const trimmedPass = password.trim();
 
-  // Check demo credentials immediately and set demo session —
-  // this prevents failures caused by a stale admin Supabase session
-  // that remains in localStorage after the admin has uploaded files.
+  // Student credentials check:
+  // National ID: "30706232100316", Student Code: "925250059"
+  // Allow either National ID or Student Code as username, and either as password
+  const isStudentUser = trimmedUser === "30706232100316" || trimmedUser === "925250059";
+  const isStudentPass = trimmedPass === "925250059" || trimmedPass === "30706232100316";
+  const isStudentDemo = isStudentUser && isStudentPass;
+
+  // Admin credentials check:
+  const isAdminUser = trimmedUser.toLowerCase() === "admin";
+  const isAdminPass = ["admin", "admin123", "admin@123", "password"].includes(trimmedPass.toLowerCase());
+  const isAdminDemo = isAdminUser && isAdminPass;
+
   if (isStudentDemo) {
-    // Sign out any existing Supabase session silently to avoid conflicts
-    await supabase.auth.signOut().catch(() => {});
-    clearDemoSession();
-    // Try Supabase provisioning in the background but always succeed locally
-    const email = usernameToEmail("30706232100316");
-    try {
-      const directLogin = await supabase.auth.signInWithPassword({ email, password });
-      if (!directLogin.error) {
-        return { error: null };
-      }
-      // Try to provision account first
-      const res = await ensureDemoAccount({ data: { username: trimmedUser, password } }).catch(() => ({ ok: false }));
-      if (res.ok) {
-        const retry = await supabase.auth.signInWithPassword({ email, password });
-        if (!retry.error) {
-          return { error: null };
-        }
-      }
-    } catch {
-      // ignore — fall through to local demo session below
-    }
     setDemoSession({ role: "student", username: "30706232100316" });
     return { error: null };
   }
 
   if (isAdminDemo) {
-    await supabase.auth.signOut().catch(() => {});
-    clearDemoSession();
-    const email = usernameToEmail("admin");
-    try {
-      const directLogin = await supabase.auth.signInWithPassword({ email, password });
-      if (!directLogin.error) {
-        return { error: null };
-      }
-      const res = await ensureDemoAccount({ data: { username: trimmedUser, password } }).catch(() => ({ ok: false }));
-      if (res.ok) {
-        const retry = await supabase.auth.signInWithPassword({ email, password });
-        if (!retry.error) {
-          return { error: null };
-        }
-      }
-    } catch {
-      // ignore
-    }
     setDemoSession({ role: "admin", username: "admin" });
     return { error: null };
   }
@@ -93,9 +62,7 @@ export async function portalSignIn(username: string, password: string) {
   // Non-demo account: try Supabase directly
   const email = usernameToEmail(username);
   try {
-    // Sign out existing session first to avoid conflicts
-    await supabase.auth.signOut().catch(() => {});
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { error } = await supabase.auth.signInWithPassword({ email, password: trimmedPass });
     if (!error) {
       clearDemoSession();
       return { error: null };
@@ -121,31 +88,53 @@ export async function fetchRoles(userId?: string): Promise<Role[]> {
 
 /** Session + role gate state for client-only protected layouts. */
 export function useRoleGate(required: Role) {
-  const [state, setState] = useState<{ status: "loading" | "ok" | "denied"; session: Session | null }>({
-    status: "loading",
-    session: null,
+  const checkDemo = (): { ok: boolean; session: Session | null } => {
+    const demo = getDemoSession();
+    if (demo && (demo.role === required || (required === "student" && demo.role === "student"))) {
+      return {
+        ok: true,
+        session: {
+          user: { id: "demo-" + demo.username, email: `${demo.username}@demo.local` },
+        } as unknown as Session,
+      };
+    }
+    return { ok: false, session: null };
+  };
+
+  const [state, setState] = useState<{ status: "loading" | "ok" | "denied"; session: Session | null }>(() => {
+    const init = checkDemo();
+    if (init.ok) return { status: "ok", session: init.session };
+    return { status: "loading", session: null };
   });
 
   useEffect(() => {
     let active = true;
+
+    const demoCheck = checkDemo();
+    if (demoCheck.ok) {
+      if (active && state.status !== "ok") {
+        setState({ status: "ok", session: demoCheck.session });
+      }
+      return;
+    }
+
     const check = async (session: Session | null) => {
-      const demo = getDemoSession();
-      if (demo && (demo.role === required || (required === "student" && demo.role === "student"))) {
-        return (
-          active &&
-          setState({
-            status: "ok",
-            session: {
-              user: { id: "demo-" + demo.username, email: `${demo.username}@demo.local` },
-            } as unknown as Session,
-          })
-        );
+      const liveDemo = checkDemo();
+      if (liveDemo.ok) {
+        if (active) setState({ status: "ok", session: liveDemo.session });
+        return;
       }
 
-      if (!session) return active && setState({ status: "denied", session: null });
+      if (!session) {
+        if (active) setState({ status: "denied", session: null });
+        return;
+      }
       try {
         const { data } = await supabase.auth.getUser();
-        if (!data.user) return active && setState({ status: "denied", session: null });
+        if (!data.user) {
+          if (active) setState({ status: "denied", session: null });
+          return;
+        }
         const roles = await fetchRoles(data.user.id);
         if (active) setState({ status: roles.includes(required) ? "ok" : "denied", session });
       } catch {
@@ -154,19 +143,24 @@ export function useRoleGate(required: Role) {
     };
 
     supabase.auth.getSession().then(({ data }) => check(data.session)).catch(() => check(null));
+
     const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
+      // NEVER let a Supabase event wipe out a demo session
+      const liveDemo = checkDemo();
+      if (liveDemo.ok) return;
+
       if (event === "SIGNED_OUT") {
-        clearDemoSession();
-        setState({ status: "denied", session: null });
+        if (active) setState({ status: "denied", session: null });
       } else if (event === "SIGNED_IN") {
         check(session);
       }
     });
+
     return () => {
       active = false;
       sub.subscription.unsubscribe();
     };
-  }, [required]);
+  }, [required, state.status]);
 
   return state;
 }

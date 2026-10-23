@@ -1,6 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useEffect } from "react";
 import { LoginCard } from "@/components/portal/LoginCard";
-import { fetchRoles, portalSignIn, type Role } from "@/lib/session";
+import { fetchRoles, getDemoSession, portalSignIn, type Role } from "@/lib/session";
 import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/admin-login")({
@@ -20,6 +21,14 @@ export const Route = createFileRoute("/admin-login")({
 
 function AdminLogin() {
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const demo = getDemoSession();
+    if (demo?.role === "admin") {
+      navigate({ to: "/admin", replace: true });
+    }
+  }, [navigate]);
+
   return (
     <LoginCard
       title="بوابة المسؤول"
@@ -27,6 +36,16 @@ function AdminLogin() {
       onSubmit={async (u, p) => {
         const { error } = await portalSignIn(u, p);
         if (error) return error;
+
+        const demo = getDemoSession();
+        if (demo) {
+          if (demo.role === "admin") {
+            navigate({ to: "/admin", replace: true });
+            return null;
+          }
+          return "هذا الحساب لا يملك صلاحيات المسؤول";
+        }
+
         let roles: Role[] = [];
         try {
           const { data } = await supabase.auth.getUser();
@@ -38,7 +57,7 @@ function AdminLogin() {
           await supabase.auth.signOut().catch(() => {});
           return "هذا الحساب لا يملك صلاحيات المسؤول";
         }
-        navigate({ to: "/admin" });
+        navigate({ to: "/admin", replace: true });
         return null;
       }}
       footer={
