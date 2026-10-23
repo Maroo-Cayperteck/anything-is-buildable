@@ -28,7 +28,7 @@ function Grades() {
         <StatCard icon={Award} label="المعدل التراكمي" value={<span className="text-danger">{Number(p.cgpa).toFixed(2)}</span>} sub="/ 4.00" tone="danger" />
         <StatCard icon={GraduationCap} label="التقدير" value="D+" tone="gold" />
         <StatCard icon={Clock} label="الساعات المكتسبة" value={p.earned_hours} sub="ساعة" />
-        <StatCard icon={TrendingUp} label="المستوى" value="2" tone="success" />
+        <StatCard icon={TrendingUp} label="المستوى" value="4" tone="success" />
       </div>
 
       <section className="overflow-hidden rounded-xl border bg-card shadow-card">
@@ -38,7 +38,7 @@ function Grades() {
         </button>
         {scaleOpen && (
           <div className="grid grid-cols-3 gap-2 border-t p-6 sm:grid-cols-5 lg:grid-cols-9">
-            {GPA_SCALE.map(([g, pts, range]) => (
+            {GPA_SCALE.map(([g = "", pts, range]) => (
               <div key={g} className="rounded-lg border p-3 text-center">
                 <GradePill grade={g} />
                 <div className="mt-2 font-mono text-sm font-bold">{pts}</div>

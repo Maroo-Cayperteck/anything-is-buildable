@@ -61,13 +61,14 @@ function Dashboard() {
         </Card>
         <Card title="روابط سريعة" icon={FileDown}>
           <div className="grid gap-2">
-            {([
+            {[
               ["/portal/info", "بيانات الطالب"],
               ["/portal/grades", "النتائج والمعدل التراكمي"],
               ["/portal/courses", "المقررات المسجلة"],
               ["/portal/documents", "تحميل ملفات الطالب"],
-            ] as const).map(([to, label]) => (
-              <Link key={to} to={to} className="rounded-lg border px-4 py-3 text-sm transition-colors hover:border-primary hover:bg-info-soft">
+            ].map(([to, label]) => to && (
+              // eslint-disable-next-line
+              <Link key={to} to={to as "/portal"} className="rounded-lg border px-4 py-3 text-sm transition-colors hover:border-primary hover:bg-info-soft">
                 {label}
               </Link>
             ))}

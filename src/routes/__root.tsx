@@ -67,8 +67,8 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "بوابة الطالب — جامعة حلوان الأهلية" },
-      { name: "description", content: "بوابة نظام معلومات الطلاب — جامعة حلوان الأهلية (Helwan National University)" },
+      { title: "بوابة الطالب — محاكاة" },
+      { name: "description", content: "محاكاة تعليمية لبوابة طالب جامعي" },
     ],
     links: [
       { rel: "stylesheet", href: appCss },

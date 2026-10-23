@@ -67,18 +67,9 @@ function Info() {
         </div>
       </Card>
 
-      <Card title="الأمان وشؤون الطلاب" icon={ShieldCheck}>
+      <Card title="الأمان" icon={ShieldCheck}>
         <p className="text-sm text-muted-foreground">
-          لتحديث البيانات الشخصية أو كلمة المرور، يرجى مراجعة إدارة شؤون الطلاب عبر{" "}
-          <a
-            href="https://www.facebook.com/HNU.Helwan"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="font-medium text-primary underline"
-          >
-            الصفحة الرسمية لجامعة حلوان الأهلية
-          </a>
-          .
+          هذا حساب تجريبي مخصص للعرض. تغيير كلمة المرور غير متاح في وضع المحاكاة.
         </p>
       </Card>
     </div>

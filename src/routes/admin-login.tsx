@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { LoginCard } from "@/components/portal/LoginCard";
-import { fetchRoles, portalSignIn, type Role } from "@/lib/session";
+import { fetchRoles, portalSignIn } from "@/lib/session";
 import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/admin-login")({
@@ -27,37 +27,16 @@ function AdminLogin() {
       onSubmit={async (u, p) => {
         const { error } = await portalSignIn(u, p);
         if (error) return error;
-        let roles: Role[] = [];
-        try {
-          const { data } = await supabase.auth.getUser();
-          roles = await fetchRoles(data?.user?.id);
-        } catch {
-          roles = await fetchRoles();
-        }
+        const { data } = await supabase.auth.getUser();
+        const roles = data.user ? await fetchRoles(data.user.id) : [];
         if (!roles.includes("admin")) {
-          await supabase.auth.signOut().catch(() => {});
+          await supabase.auth.signOut();
           return "هذا الحساب لا يملك صلاحيات المسؤول";
         }
         navigate({ to: "/admin" });
         return null;
       }}
-      footer={
-        <div className="space-y-3">
-          <Link to="/" className="inline-block text-xs font-semibold text-primary hover:underline">
-            العودة لدخول الطلاب
-          </Link>
-          <div className="border-t pt-2">
-            <a
-              href="https://www.facebook.com/HNU.Helwan"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
-            >
-              جامعة حلوان الأهلية — Helwan National University
-            </a>
-          </div>
-        </div>
-      }
+      footer={<Link to="/" className="text-primary hover:underline">العودة لدخول الطلاب</Link>}
     />
   );
 }

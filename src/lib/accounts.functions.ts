@@ -17,8 +17,7 @@ async function sha256(text: string) {
     .join("");
 }
 
-export const STUDENT_PROFILE = {
-  user_id: "demo-student-id",
+const STUDENT_PROFILE = {
   username: "30706232100316",
   full_name_ar: "عمر احمد محمد محمد",
   full_name_en: "Omar Ahmed Mohmed Mohmed",
@@ -26,14 +25,13 @@ export const STUDENT_PROFILE = {
   student_code: "925250059",
   program: "هندسة الشبكات والأمن السيبراني",
   faculty: "كلية الهندسة",
-  academic_level: "المستوى الثاني",
+  academic_level: "المستوى الأول",
   academic_status: "مقيد — منتظم",
   academic_year: "2026 / 2027",
   gender: "ذكر",
   phone: null,
   cgpa: 1.31,
   earned_hours: 28,
-  created_at: "2026-10-22T00:00:00.000Z",
   extra: {
     application_no: "25084",
     certificate: "الثانوية الأزهرية - علمي - 2025",
@@ -66,7 +64,7 @@ export const ensureDemoAccount = createServerFn({ method: "POST" })
     }
     await supabaseAdmin.from("user_roles").upsert({ user_id: user.id, role: account.role }, { onConflict: "user_id,role" });
     if (account.role === "student") {
-      await supabaseAdmin.from("student_profiles").upsert({ ...STUDENT_PROFILE, user_id: user.id }, { onConflict: "user_id" });
+      await supabaseAdmin.from("student_profiles").upsert({ user_id: user.id, ...STUDENT_PROFILE }, { onConflict: "user_id" });
     }
     return { ok: true as const };
   });
