@@ -92,7 +92,7 @@ export function Shell({
       >
         <div className="flex items-center gap-3 border-b border-sidebar-border px-5 py-5">
           <a
-            href="https://www.facebook.com/share/1C1AG6nnue/"
+            href="https://www.facebook.com/HNU.Helwan"
             target="_blank"
             rel="noopener noreferrer"
             className="group flex items-center gap-3 transition-opacity hover:opacity-90"
@@ -157,7 +157,7 @@ export function Shell({
         </main>
         <footer className="px-8 pb-6 text-center text-xs text-muted-foreground">
           <a
-            href="https://www.facebook.com/share/1C1AG6nnue/"
+            href="https://www.facebook.com/HNU.Helwan"
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-2 hover:text-primary transition-colors font-medium"
@@ -197,7 +197,7 @@ export function Field({ label, value, mono }: { label: string; value?: ReactNode
 export function SampleBadge() {
   return (
     <a
-      href="https://www.facebook.com/share/1C1AG6nnue/"
+      href="https://www.facebook.com/HNU.Helwan"
       target="_blank"
       rel="noopener noreferrer"
       className="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary hover:underline"

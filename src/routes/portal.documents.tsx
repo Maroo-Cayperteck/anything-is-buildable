@@ -4,6 +4,8 @@ import { Download, Eye, FileText, FileX2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { documentsQuery, formatSize } from "@/lib/portal-data";
 import { downloadDocument } from "@/lib/download";
+import { useState } from "react";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/portal/documents")({
   head: () => ({
@@ -17,6 +19,92 @@ export const Route = createFileRoute("/portal/documents")({
   component: Documents,
 });
 
+function DocumentCard({
+  d,
+}: {
+  d: {
+    id: string;
+    title: string;
+    description?: string | null;
+    file_path?: string | null;
+    file_name?: string | null;
+    file_size?: number | null;
+    is_available: boolean;
+  };
+}) {
+  const [downloading, setDownloading] = useState(false);
+  const has = !!d.file_path;
+
+  async function handleDownload() {
+    if (!d.file_path) return;
+    setDownloading(true);
+    try {
+      await downloadDocument(d.file_path, d.file_name ?? "document.pdf");
+    } catch {
+      toast.error("تعذر تحميل الملف");
+    } finally {
+      setDownloading(false);
+    }
+  }
+
+  return (
+    <article className="flex flex-col rounded-xl border bg-card p-6 shadow-card transition-all hover:-translate-y-0.5 hover:shadow-elevated">
+      <div className="flex items-start gap-4">
+        <div
+          className={
+            has
+              ? "grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-info-soft text-primary"
+              : "grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-muted text-muted-foreground"
+          }
+        >
+          {has ? <FileText className="h-6 w-6" /> : <FileX2 className="h-6 w-6" />}
+        </div>
+        <div className="min-w-0 flex-1">
+          <h3 className="font-semibold leading-snug">{d.title}</h3>
+          {d.description && <p className="mt-1 text-sm text-muted-foreground">{d.description}</p>}
+        </div>
+      </div>
+
+      {has ? (
+        <>
+          <div className="mt-4 flex flex-wrap gap-3 text-xs text-muted-foreground">
+            <span className="font-mono" dir="ltr">
+              {d.file_name}
+            </span>
+            <span>·</span>
+            <span dir="ltr">{formatSize(d.file_size)}</span>
+          </div>
+          <div className="mt-auto grid grid-cols-2 gap-2 pt-5">
+            {/* View button — opens inline PDF viewer */}
+            <Button asChild variant="brand">
+              <Link to="/portal/viewer/$docId" params={{ docId: d.id }}>
+                <Eye /> معاينة الملف
+              </Link>
+            </Button>
+
+            {/* Download button — triggers file download */}
+            <Button
+              variant="outline"
+              disabled={downloading}
+              onClick={handleDownload}
+              aria-label={`تحميل ${d.file_name ?? "document.pdf"}`}
+            >
+              {downloading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download />}
+              تحميل الملف
+            </Button>
+          </div>
+        </>
+      ) : (
+        <div className="mt-auto pt-5">
+          <div className="rounded-lg border border-dashed bg-muted/50 p-4 text-center text-sm text-muted-foreground">
+            هذا الملف غير متاح حاليًا
+          </div>
+        </div>
+      )}
+    </article>
+  );
+}
+
 function Documents() {
   const { data, isLoading, isError } = useQuery(documentsQuery);
 
@@ -26,55 +114,42 @@ function Documents() {
         <Loader2 className="h-6 w-6 animate-spin" />
       </div>
     );
-  if (isError) return <div className="rounded-xl border bg-card p-8 text-center text-destructive">تعذر تحميل قائمة الملفات.</div>;
-  if (!data?.length) return <div className="rounded-xl border bg-card p-12 text-center text-muted-foreground">لا توجد ملفات متاحة حاليًا.</div>;
+  if (isError)
+    return <div className="rounded-xl border bg-card p-8 text-center text-destructive">تعذر تحميل قائمة الملفات.</div>;
+  if (!data?.length)
+    return (
+      <div className="rounded-xl border bg-card p-12 text-center text-muted-foreground">لا توجد ملفات متاحة حاليًا.</div>
+    );
+
+  const available = data.filter((d) => d.is_available);
+  const hidden = data.filter((d) => !d.is_available);
 
   return (
-    <div className="space-y-4">
-      <p className="text-sm text-muted-foreground">يمكنك معاينة الملفات داخل البوابة أو تحميلها بصيغة PDF.</p>
-      <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-        {data.map((d) => {
-          const has = !!d.file_path;
-          return (
-            <article key={d.id} className="flex flex-col rounded-xl border bg-card p-6 shadow-card transition-all hover:-translate-y-0.5 hover:shadow-elevated">
-              <div className="flex items-start gap-4">
-                <div className={has ? "grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-info-soft text-primary" : "grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-muted text-muted-foreground"}>
-                  {has ? <FileText className="h-6 w-6" /> : <FileX2 className="h-6 w-6" />}
-                </div>
-                <div className="min-w-0">
-                  <h3 className="font-semibold leading-snug">{d.title}</h3>
-                  {d.description && <p className="mt-1 text-sm text-muted-foreground">{d.description}</p>}
-                </div>
-              </div>
-              {has ? (
-                <>
-                  <div className="mt-4 flex gap-3 text-xs text-muted-foreground">
-                    <span className="font-mono" dir="ltr">{d.file_name}</span>
-                    <span>·</span>
-                    <span dir="ltr">{formatSize(d.file_size)}</span>
-                  </div>
-                  <div className="mt-auto grid grid-cols-2 gap-2 pt-5">
-                    <Button asChild variant="brand">
-                      <Link to="/portal/viewer/$docId" params={{ docId: d.id }}>
-                        <Eye /> معاينة الملف
-                      </Link>
-                    </Button>
-                    <Button variant="outline" onClick={() => downloadDocument(d.file_path!, d.file_name ?? "document.pdf")}>
-                      <Download /> تحميل الملف
-                    </Button>
-                  </div>
-                </>
-              ) : (
-                <div className="mt-auto pt-5">
-                  <div className="rounded-lg border border-dashed bg-muted/50 p-4 text-center text-sm text-muted-foreground">
-                    هذا الملف غير متاح حاليًا
-                  </div>
-                </div>
-              )}
-            </article>
-          );
-        })}
-      </div>
+    <div className="space-y-6">
+      <p className="text-sm text-muted-foreground">
+        يمكنك معاينة الملفات داخل البوابة مباشرةً أو تحميلها بصيغة PDF.
+      </p>
+
+      {available.length > 0 && (
+        <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+          {available.map((d) => (
+            <DocumentCard key={d.id} d={d} />
+          ))}
+        </div>
+      )}
+
+      {hidden.length > 0 && (
+        <details className="group rounded-xl border bg-card shadow-card">
+          <summary className="cursor-pointer list-none px-6 py-4 text-sm font-semibold text-muted-foreground select-none">
+            ملفات مخفية ({hidden.length})
+          </summary>
+          <div className="grid gap-5 p-6 pt-2 sm:grid-cols-2 xl:grid-cols-3">
+            {hidden.map((d) => (
+              <DocumentCard key={d.id} d={d} />
+            ))}
+          </div>
+        </details>
+      )}
     </div>
   );
 }

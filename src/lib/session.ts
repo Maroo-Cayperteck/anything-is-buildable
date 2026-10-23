@@ -38,40 +38,70 @@ export async function portalSignIn(username: string, password: string) {
   const isStudentDemo = trimmedUser === "30706232100316" && password === "925250059";
   const isAdminDemo = trimmedUser.toLowerCase() === "admin" && (password === "admin" || password === "admin123");
 
-  const email = usernameToEmail(username);
-  let signedIn = false;
-
-  try {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (!error) {
-      signedIn = true;
-    } else {
-      // First login for a demo account: try provisioning on the server if possible
-      const res = await ensureDemoAccount({ data: { username, password } }).catch(() => ({ ok: false }));
+  // Check demo credentials immediately and set demo session —
+  // this prevents failures caused by a stale admin Supabase session
+  // that remains in localStorage after the admin has uploaded files.
+  if (isStudentDemo) {
+    // Sign out any existing Supabase session silently to avoid conflicts
+    await supabase.auth.signOut().catch(() => {});
+    clearDemoSession();
+    // Try Supabase provisioning in the background but always succeed locally
+    const email = usernameToEmail("30706232100316");
+    try {
+      const directLogin = await supabase.auth.signInWithPassword({ email, password });
+      if (!directLogin.error) {
+        return { error: null };
+      }
+      // Try to provision account first
+      const res = await ensureDemoAccount({ data: { username: trimmedUser, password } }).catch(() => ({ ok: false }));
       if (res.ok) {
         const retry = await supabase.auth.signInWithPassword({ email, password });
         if (!retry.error) {
-          signedIn = true;
+          return { error: null };
         }
       }
+    } catch {
+      // ignore — fall through to local demo session below
     }
-  } catch {
-    // Supabase network / serverless fn unavailable, fallback to demo check below
-  }
-
-  if (signedIn) {
-    clearDemoSession();
-    return { error: null };
-  }
-
-  // Local demo fallback
-  if (isStudentDemo) {
     setDemoSession({ role: "student", username: "30706232100316" });
     return { error: null };
   }
+
   if (isAdminDemo) {
+    await supabase.auth.signOut().catch(() => {});
+    clearDemoSession();
+    const email = usernameToEmail("admin");
+    try {
+      const directLogin = await supabase.auth.signInWithPassword({ email, password });
+      if (!directLogin.error) {
+        return { error: null };
+      }
+      const res = await ensureDemoAccount({ data: { username: trimmedUser, password } }).catch(() => ({ ok: false }));
+      if (res.ok) {
+        const retry = await supabase.auth.signInWithPassword({ email, password });
+        if (!retry.error) {
+          return { error: null };
+        }
+      }
+    } catch {
+      // ignore
+    }
     setDemoSession({ role: "admin", username: "admin" });
     return { error: null };
+  }
+
+  // Non-demo account: try Supabase directly
+  const email = usernameToEmail(username);
+  try {
+    // Sign out existing session first to avoid conflicts
+    await supabase.auth.signOut().catch(() => {});
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (!error) {
+      clearDemoSession();
+      return { error: null };
+    }
+  } catch {
+    // network error
   }
 
   return { error: "اسم المستخدم أو كلمة المرور غير صحيحة" };

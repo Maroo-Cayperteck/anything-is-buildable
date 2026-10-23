@@ -71,7 +71,7 @@ function Info() {
         <p className="text-sm text-muted-foreground">
           لتحديث البيانات الشخصية أو كلمة المرور، يرجى مراجعة إدارة شؤون الطلاب عبر{" "}
           <a
-            href="https://www.facebook.com/share/1C1AG6nnue/"
+            href="https://www.facebook.com/HNU.Helwan"
             target="_blank"
             rel="noopener noreferrer"
             className="font-medium text-primary underline"

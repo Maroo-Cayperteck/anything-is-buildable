@@ -23,7 +23,7 @@ export const TRANSCRIPT: Term[] = [
     posted: true,
     gpa: 1.0,
     courses: [{ code: "GEN112", name: "Mathematics (2)", hours: 3, marks: 60, grade: "D", points: 1.0 }],
-    cumulative: { cgpa: 1.31, hours: 28, level: 4 },
+    cumulative: { cgpa: 1.31, hours: 28, level: 2 },
   },
   {
     season: "SPRING",

@@ -26,7 +26,7 @@ export const STUDENT_PROFILE = {
   student_code: "925250059",
   program: "هندسة الشبكات والأمن السيبراني",
   faculty: "كلية الهندسة",
-  academic_level: "المستوى الأول",
+  academic_level: "المستوى الثاني",
   academic_status: "مقيد — منتظم",
   academic_year: "2026 / 2027",
   gender: "ذكر",

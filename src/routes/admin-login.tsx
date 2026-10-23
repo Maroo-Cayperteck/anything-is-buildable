@@ -48,7 +48,7 @@ function AdminLogin() {
           </Link>
           <div className="border-t pt-2">
             <a
-              href="https://www.facebook.com/share/1C1AG6nnue/"
+              href="https://www.facebook.com/HNU.Helwan"
               target="_blank"
               rel="noopener noreferrer"
               className="text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"

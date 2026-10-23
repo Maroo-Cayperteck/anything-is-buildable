@@ -54,7 +54,7 @@ export function LoginCard({
       <div className="page-enter w-full max-w-md rounded-2xl bg-card p-8 shadow-elevated sm:p-10">
         <div className="flex flex-col items-center text-center">
           <a
-            href="https://www.facebook.com/share/1C1AG6nnue/"
+            href="https://www.facebook.com/HNU.Helwan"
             target="_blank"
             rel="noopener noreferrer"
             className="group block transition-transform hover:scale-105"
