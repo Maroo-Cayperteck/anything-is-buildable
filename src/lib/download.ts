@@ -17,8 +17,8 @@ export async function downloadDocument(path: string, fileName: string) {
 
     let downloadUrl = resolvedUrl;
 
-    // For remote (https://) URLs, fetch as blob so the `download` attribute works
-    if (resolvedUrl.startsWith("http://") || resolvedUrl.startsWith("https://")) {
+    // For remote (https://) or server-hosted (/) URLs, fetch as blob so the `download` attribute works
+    if (resolvedUrl.startsWith("http://") || resolvedUrl.startsWith("https://") || resolvedUrl.startsWith("/")) {
       const response = await fetch(resolvedUrl);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const blob = await response.blob();

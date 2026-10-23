@@ -4,16 +4,16 @@ import type { Tables } from "@/integrations/supabase/types";
 export type Doc = Tables<"documents">;
 
 export const BUCKET = "student-documents";
-const DOCS_STORAGE_KEY = "hnu_portal_documents_v1";
+const DOCS_STORAGE_KEY = "hnu_portal_documents_v2";
 
 export const INITIAL_DOCUMENTS: Doc[] = [
   {
     id: "doc-1",
     title: "طلب الالتحاق الخاص بالطالب",
     description: "نموذج طلب الالتحاق المقدم إلى كلية الهندسة — جامعة حلوان الأهلية",
-    file_path: null,
-    file_name: null,
-    file_size: null,
+    file_path: "/documents/admission-application.pdf",
+    file_name: "CamScanner 10-22-2026 17.58(3).pdf",
+    file_size: 45279,
     is_available: true,
     sort_order: 1,
     created_at: new Date().toISOString(),
@@ -23,9 +23,9 @@ export const INITIAL_DOCUMENTS: Doc[] = [
     id: "doc-2",
     title: "جدول الحضور الخاص بالطالب",
     description: "الجدول الأسبوعي للمحاضرات والسكاشن — الفصل الدراسي الأول",
-    file_path: null,
-    file_name: null,
-    file_size: null,
+    file_path: "/documents/attendance-schedule.pdf",
+    file_name: "NCSE_Schedule_First_Semester_2026-2027_Level 1-1 (3).pdf",
+    file_size: 389368,
     is_available: true,
     sort_order: 2,
     created_at: new Date().toISOString(),
@@ -35,9 +35,9 @@ export const INITIAL_DOCUMENTS: Doc[] = [
     id: "doc-3",
     title: "جدول امتحانات منتصف الفصل الدراسي الأول",
     description: "مواعيد اختبارات منتصف الفصل الدراسي الأول 2026/2027",
-    file_path: null,
-    file_name: null,
-    file_size: null,
+    file_path: "/documents/midterm-exam-schedule.pdf",
+    file_name: "جدول اختبارات منتصف الفصل الدراسي الاول.pdf",
+    file_size: 212885,
     is_available: true,
     sort_order: 3,
     created_at: new Date().toISOString(),
@@ -127,7 +127,25 @@ export function getLocalDocuments(): Doc[] {
       return INITIAL_DOCUMENTS;
     }
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_DOCUMENTS;
+    if (!Array.isArray(parsed) || parsed.length === 0) {
+      return INITIAL_DOCUMENTS;
+    }
+    // Self-healing: if an entry has missing file_path, merge server file_path from INITIAL_DOCUMENTS
+    const healed = parsed.map((doc: Doc) => {
+      if (!doc.file_path) {
+        const init = INITIAL_DOCUMENTS.find((d) => d.id === doc.id);
+        if (init?.file_path) {
+          return {
+            ...doc,
+            file_path: init.file_path,
+            file_name: doc.file_name || init.file_name,
+            file_size: doc.file_size || init.file_size,
+          };
+        }
+      }
+      return doc;
+    });
+    return healed;
   } catch {
     return INITIAL_DOCUMENTS;
   }
@@ -294,15 +312,26 @@ export async function reorderDocumentList(list: Doc[]): Promise<void> {
 export async function resolveDocumentUrl(path: string, downloadName?: string): Promise<string> {
   if (!path) throw new Error("مسار الملف غير محدد");
 
-  if (path.startsWith("blob:") || path.startsWith("data:")) {
+  if (path.startsWith("blob:") || path.startsWith("data:") || path.startsWith("/")) {
     return path;
+  }
+
+  if (path.startsWith("documents/")) {
+    return `/${path}`;
   }
 
   if (path.startsWith("idb:")) {
     const docId = path.replace("idb:", "");
     const blob = await getPdfBlob(docId);
-    if (!blob) throw new Error("تعذر قراءة الملف المخزن");
-    return URL.createObjectURL(blob);
+    if (blob) {
+      return URL.createObjectURL(blob);
+    }
+    // Fallback if accessed on a different device (like mobile): check bundled server file
+    const fallback = INITIAL_DOCUMENTS.find((d) => d.id === docId);
+    if (fallback?.file_path) {
+      return fallback.file_path;
+    }
+    throw new Error("تعذر قراءة الملف المخزن");
   }
 
   // Fallback: check if the docId is in the path and stored in IndexedDB
@@ -310,6 +339,8 @@ export async function resolveDocumentUrl(path: string, downloadName?: string): P
   if (match?.[1]) {
     const blob = await getPdfBlob(match[1]);
     if (blob) return URL.createObjectURL(blob);
+    const fallback = INITIAL_DOCUMENTS.find((d) => d.id === match[1]);
+    if (fallback?.file_path) return fallback.file_path;
   }
 
   // Try remote Supabase signed URL with timeout
@@ -323,6 +354,12 @@ export async function resolveDocumentUrl(path: string, downloadName?: string): P
     if (!res.error && res.data?.signedUrl) return res.data.signedUrl;
   } catch {
     // fallback
+  }
+
+  // Final fallback to matching default document if available
+  const finalFallback = INITIAL_DOCUMENTS.find((d) => d.file_path === path || (d.id && path.includes(d.id)));
+  if (finalFallback?.file_path) {
+    return finalFallback.file_path;
   }
 
   throw new Error("تعذر فتح أو تحميل الملف");
