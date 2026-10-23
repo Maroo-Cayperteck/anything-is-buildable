@@ -154,12 +154,13 @@ export const profileQuery = queryOptions({
   },
 });
 
-import { fetchAllDocuments, resolveDocumentUrl, BUCKET } from "./documents-storage";
+import { fetchAllDocuments, resolveDocumentUrl, getLocalDocuments, BUCKET } from "./documents-storage";
 export { BUCKET };
 
 export const documentsQuery = queryOptions({
   queryKey: ["documents"],
   queryFn: () => fetchAllDocuments(),
+  initialData: () => getLocalDocuments(),
 });
 
 export async function signedUrl(path: string, download?: string) {

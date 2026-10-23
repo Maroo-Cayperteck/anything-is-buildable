@@ -153,19 +153,31 @@ export function saveLocalDocuments(docs: Doc[]): void {
   }
 }
 
+// Helper to prevent hanging Supabase network requests from blocking the UI
+function withTimeout<T>(promise: PromiseLike<T>, ms = 1200): Promise<T> {
+  return Promise.race([
+    Promise.resolve(promise),
+    new Promise<T>((_, reject) => setTimeout(() => reject(new Error("Supabase timeout")), ms)),
+  ]);
+}
+
 // --- High-level CRUD operations that work offline and with Supabase ---
 
 export async function fetchAllDocuments(): Promise<Doc[]> {
+  const local = getLocalDocuments();
   try {
-    const { data, error } = await supabase.from("documents").select("*").order("sort_order");
-    if (!error && data && data.length > 0) {
-      saveLocalDocuments(data);
-      return data;
+    const res = await withTimeout(
+      supabase.from("documents").select("*").order("sort_order"),
+      1000,
+    );
+    if (!res.error && res.data && res.data.length > 0) {
+      saveLocalDocuments(res.data);
+      return res.data;
     }
   } catch {
-    // ignore supabase error and use local
+    // Supabase unavailable / hanging; return local documents immediately
   }
-  return getLocalDocuments();
+  return local;
 }
 
 export async function createDocument(title = "ملف جديد", description = ""): Promise<Doc> {
@@ -184,23 +196,21 @@ export async function createDocument(title = "ملف جديد", description = ""
     updated_at: new Date().toISOString(),
   };
 
-  try {
-    const { data, error } = await supabase.from("documents").insert({
+  const updated = [...local, newDoc];
+  saveLocalDocuments(updated);
+
+  // Sync to Supabase in background, never block UI
+  withTimeout(
+    supabase.from("documents").insert({
       id: newDoc.id,
       title: newDoc.title,
       description: newDoc.description,
       sort_order: newDoc.sort_order,
       is_available: newDoc.is_available,
-    }).select().maybeSingle();
-    if (!error && data) {
-      newDoc.id = data.id;
-    }
-  } catch {
-    // continue with local id
-  }
+    }),
+    1200,
+  ).catch(() => {});
 
-  const updated = [...local, newDoc];
-  saveLocalDocuments(updated);
   return newDoc;
 }
 
@@ -220,36 +230,37 @@ export async function updateDocumentFields(id: string, updates: Partial<Doc>): P
   local[idx] = merged;
   saveLocalDocuments(local);
 
-  try {
-    await supabase.from("documents").update(updates).eq("id", id);
-  } catch {
-    // ignore
-  }
+  // Sync to Supabase in background, never block UI
+  withTimeout(supabase.from("documents").update(updates).eq("id", id), 1200).catch(() => {});
 
   return merged;
 }
 
 export async function uploadAndPublishDocument(docId: string, file: File): Promise<Doc | null> {
-  // Always store blob locally in IndexedDB first
+  // Always store blob locally in IndexedDB first so viewing/downloading always works instantly
   await storePdfBlob(docId, file);
-  let filePath = `idb:${docId}`;
-
-  // Try uploading to Supabase Storage if available
-  try {
-    const remotePath = `docs/${docId}/${Date.now()}.pdf`;
-    const up = await supabase.storage.from(BUCKET).upload(remotePath, file, { contentType: "application/pdf" });
-    if (!up.error) {
-      filePath = remotePath;
-    }
-  } catch {
-    // keep local idb path
-  }
+  const filePath = `idb:${docId}`;
 
   const updated = await updateDocumentFields(docId, {
     file_path: filePath,
     file_name: file.name,
     file_size: file.size,
   });
+
+  // Try uploading to Supabase Storage in the background with timeout
+  withTimeout(
+    (async () => {
+      const remotePath = `docs/${docId}/${Date.now()}.pdf`;
+      const up = await supabase.storage.from(BUCKET).upload(remotePath, file, { contentType: "application/pdf" });
+      if (!up.error) {
+        await supabase
+          .from("documents")
+          .update({ file_path: remotePath, file_name: file.name, file_size: file.size })
+          .eq("id", docId);
+      }
+    })(),
+    2000,
+  ).catch(() => {});
 
   return updated;
 }
@@ -259,27 +270,25 @@ export async function deleteDocumentRecord(doc: Doc): Promise<void> {
   const local = getLocalDocuments().filter((d) => d.id !== doc.id);
   saveLocalDocuments(local);
 
-  try {
-    if (doc.file_path && !doc.file_path.startsWith("idb:")) {
-      await supabase.storage.from(BUCKET).remove([doc.file_path]);
-    }
-    await supabase.from("documents").delete().eq("id", doc.id);
-  } catch {
-    // ignore
-  }
+  withTimeout(
+    (async () => {
+      if (doc.file_path && !doc.file_path.startsWith("idb:")) {
+        await supabase.storage.from(BUCKET).remove([doc.file_path]);
+      }
+      await supabase.from("documents").delete().eq("id", doc.id);
+    })(),
+    1200,
+  ).catch(() => {});
 }
 
 export async function reorderDocumentList(list: Doc[]): Promise<void> {
   const withOrder = list.map((doc, idx) => ({ ...doc, sort_order: idx + 1 }));
   saveLocalDocuments(withOrder);
 
-  try {
-    await Promise.all(
-      withOrder.map((d) => supabase.from("documents").update({ sort_order: d.sort_order }).eq("id", d.id)),
-    );
-  } catch {
-    // ignore
-  }
+  withTimeout(
+    Promise.all(withOrder.map((d) => supabase.from("documents").update({ sort_order: d.sort_order }).eq("id", d.id))),
+    1200,
+  ).catch(() => {});
 }
 
 export async function resolveDocumentUrl(path: string, downloadName?: string): Promise<string> {
@@ -296,21 +305,24 @@ export async function resolveDocumentUrl(path: string, downloadName?: string): P
     return URL.createObjectURL(blob);
   }
 
-  // Try remote Supabase signed URL
-  try {
-    const { data, error } = await supabase.storage
-      .from(BUCKET)
-      .createSignedUrl(path, 60 * 30, downloadName ? { download: downloadName } : undefined);
-    if (!error && data?.signedUrl) return data.signedUrl;
-  } catch {
-    // fallback
-  }
-
   // Fallback: check if the docId is in the path and stored in IndexedDB
   const match = path.match(/docs\/([^/]+)\//);
   if (match?.[1]) {
     const blob = await getPdfBlob(match[1]);
     if (blob) return URL.createObjectURL(blob);
+  }
+
+  // Try remote Supabase signed URL with timeout
+  try {
+    const res = await withTimeout(
+      supabase.storage
+        .from(BUCKET)
+        .createSignedUrl(path, 60 * 30, downloadName ? { download: downloadName } : undefined),
+      1500,
+    );
+    if (!res.error && res.data?.signedUrl) return res.data.signedUrl;
+  } catch {
+    // fallback
   }
 
   throw new Error("تعذر فتح أو تحميل الملف");
