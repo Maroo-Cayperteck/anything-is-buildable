@@ -68,29 +68,36 @@ export function LoginCard({
         <form onSubmit={handle} noValidate className="mt-8 space-y-5">
           <div>
             <label htmlFor="username" className="mb-1.5 block text-sm font-medium">اسم المستخدم</label>
-            <div className="relative">
-              <User className="absolute top-1/2 right-4 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <input id="username" name="username" dir="ltr" autoComplete="username" className={inputCls(errors.username)} />
+            <div className="relative flex items-center">
+              <User className="pointer-events-none absolute top-1/2 right-3.5 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <input
+                id="username"
+                name="username"
+                dir="ltr"
+                autoComplete="username"
+                className={cn(inputCls(errors.username), "!pr-11 !pl-4 font-mono")}
+              />
             </div>
             {errors.username && <p className="mt-1 text-xs text-destructive">{errors.username}</p>}
           </div>
           <div>
             <label htmlFor="password" className="mb-1.5 block text-sm font-medium">كلمة المرور</label>
-            <div className="relative">
-              <Lock className="absolute top-1/2 right-4 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <div className="relative flex items-center">
+              <Lock className="pointer-events-none absolute top-1/2 right-3.5 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <input
                 id="password"
                 name="password"
                 dir="ltr"
                 type={show ? "text" : "password"}
                 autoComplete="current-password"
-                className={inputCls(errors.password)}
+                className={cn(inputCls(errors.password), "!pl-14 !pr-11 font-mono tracking-wider")}
               />
               <button
                 type="button"
+                tabIndex={-1}
                 aria-label={show ? "إخفاء كلمة المرور" : "إظهار كلمة المرور"}
                 onClick={() => setShow((s) => !s)}
-                className="absolute top-1/2 left-3 -translate-y-1/2 rounded p-1 text-muted-foreground hover:text-foreground"
+                className="absolute top-1/2 left-2 z-10 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition hover:bg-muted/70 hover:text-foreground active:scale-90"
               >
                 {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
