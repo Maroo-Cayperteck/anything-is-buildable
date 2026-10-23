@@ -1,5 +1,4 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect } from "react";
 import { LoginCard } from "@/components/portal/LoginCard";
 import { fetchRoles, getDemoSession, portalSignIn, type Role } from "@/lib/session";
 import { supabase } from "@/integrations/supabase/client";
@@ -21,13 +20,6 @@ export const Route = createFileRoute("/admin-login")({
 
 function AdminLogin() {
   const navigate = useNavigate();
-
-  useEffect(() => {
-    const demo = getDemoSession();
-    if (demo?.role === "admin") {
-      navigate({ to: "/admin", replace: true });
-    }
-  }, [navigate]);
 
   return (
     <LoginCard
