@@ -19,7 +19,7 @@ function Info() {
   const p = useProfile();
   const extra = (p.extra ?? {}) as Record<string, string>;
   const parts = p.full_name_ar.split(" ");
-  const initials = parts.slice(0, 2).map((w) => w[0]).join("");
+  const initials = parts[0]?.[0] || "ع";
 
   return (
     <div className="space-y-6">
