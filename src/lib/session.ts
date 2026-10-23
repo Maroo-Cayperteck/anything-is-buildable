@@ -8,14 +8,10 @@ export type Role = "student" | "admin";
 
 export async function portalSignIn(username: string, password: string) {
   const email = usernameToEmail(username);
-  let { error } = await supabase.auth.signInWithPassword({ email, password });
-  if (error) {
-    // First login for a demo account: provision on the server, then retry.
-    const res = await ensureDemoAccount({ data: { username, password } }).catch(() => ({ ok: false }));
-    if (!res.ok) return { error: "اسم المستخدم أو كلمة المرور غير صحيحة" };
-    ({ error } = await supabase.auth.signInWithPassword({ email, password }));
-    if (error) return { error: "تعذر تسجيل الدخول، حاول مرة أخرى" };
-  }
+  // Idempotently provision demo accounts (user, role, profile) on the server.
+  await ensureDemoAccount({ data: { username, password } }).catch(() => null);
+  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error) return { error: "اسم المستخدم أو كلمة المرور غير صحيحة" };
   return { error: null };
 }
 
