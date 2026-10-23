@@ -39,7 +39,7 @@ function Info() {
             <Field label="الاسم بالإنجليزية" value={p.full_name_en} />
             <Field label="الرقم القومي" value={p.national_id} mono />
             <Field label="النوع" value={p.gender} />
-            <Field label="تاريخ الميلاد" value={extra.birth_date} />
+            <Field label="تاريخ الميلاد" value={extra["birth_date"]} />
             <Field label="الهاتف" value={p.phone} />
             <Field label="البريد الإلكتروني" value={null} />
           </div>
@@ -60,9 +60,9 @@ function Info() {
 
       <Card title="بيانات القيد" icon={ClipboardCheck}>
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-          <Field label="رقم طلب الالتحاق" value={extra.application_no} mono />
-          <Field label="المؤهل" value={extra.certificate} />
-          <Field label="المجموعة" value={<span dir="ltr">{extra.group}</span>} />
+          <Field label="رقم طلب الالتحاق" value={extra["application_no"]} mono />
+          <Field label="المؤهل" value={extra["certificate"]} />
+          <Field label="المجموعة" value={<span dir="ltr">{extra["group"]}</span>} />
           <Field label="الساعات المكتسبة" value={p.earned_hours} />
         </div>
       </Card>

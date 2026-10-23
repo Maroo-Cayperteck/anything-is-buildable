@@ -48,7 +48,7 @@ export function Shell({
   nav: NavItem[];
   title: string;
   userName: string;
-  userTag?: string;
+  userTag?: string | undefined;
   signOutTo: "/" | "/admin-login";
   children: ReactNode;
 }) {

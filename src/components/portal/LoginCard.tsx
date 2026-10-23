@@ -23,7 +23,7 @@ export function LoginCard({
 }) {
   const [show, setShow] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [errors, setErrors] = useState<{ username?: string; password?: string; form?: string }>({});
+  const [errors, setErrors] = useState<{ username?: string | undefined; password?: string | undefined; form?: string | undefined }>({});
 
   async function handle(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();

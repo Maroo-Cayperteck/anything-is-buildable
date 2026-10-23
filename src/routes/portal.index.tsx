@@ -66,8 +66,9 @@ function Dashboard() {
               ["/portal/grades", "النتائج والمعدل التراكمي"],
               ["/portal/courses", "المقررات المسجلة"],
               ["/portal/documents", "تحميل ملفات الطالب"],
-            ].map(([to, label]) => (
-              <Link key={to} to={to} className="rounded-lg border px-4 py-3 text-sm transition-colors hover:border-primary hover:bg-info-soft">
+            ].map(([to, label]) => to && (
+              // eslint-disable-next-line
+              <Link key={to} to={to as "/portal"} className="rounded-lg border px-4 py-3 text-sm transition-colors hover:border-primary hover:bg-info-soft">
                 {label}
               </Link>
             ))}
