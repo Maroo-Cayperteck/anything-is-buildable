@@ -1,7 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
-import { profileQuery } from "./portal-data";
+import { portalSnapshotQuery } from "./portal-data";
 
-/** Profile is guaranteed loaded by the /portal layout before children render. */
+/** Profile & live portal snapshot guaranteed loaded by the /portal layout before children render. */
 export function useProfile() {
-  return useQuery(profileQuery).data!;
+  return useQuery(portalSnapshotQuery()).data!.profile;
+}
+
+export function usePortalSnapshot(semesterId?: string) {
+  return useQuery(portalSnapshotQuery(semesterId));
 }

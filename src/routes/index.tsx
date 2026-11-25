@@ -44,10 +44,15 @@ function Login() {
             <div className="text-sm font-bold text-foreground">Helwan National University</div>
             <div className="mt-0.5 text-xs font-medium text-muted-foreground">Student Information System</div>
           </a>
-          <div className="pt-1">
+          <div className="space-y-2 pt-1">
             <Button asChild variant="brand" size="lg" className="h-12 w-full text-base">
               <Link to="/admin-login">دخول المسؤول</Link>
             </Button>
+            <div className="pt-1">
+              <Link to="/register" className="inline-block text-xs font-semibold text-primary hover:underline">
+                تفعيل / تسجيل حساب طالب جديد
+              </Link>
+            </div>
           </div>
         </div>
       }
