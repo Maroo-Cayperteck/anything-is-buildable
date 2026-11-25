@@ -310,23 +310,68 @@ export async function reorderDocumentList(list: Doc[]): Promise<void> {
 }
 
 /**
- * Checks whether the document identified by docId is currently available.
+ * Checks whether the document identified by docId or storage path is currently available.
  * Hidden documents (is_available === false) must NOT be served to students.
  */
 export function isDocumentAvailable(docId: string): boolean {
   const docs = getLocalDocuments();
   const doc = docs.find((d) => d.id === docId);
-  // If the doc isn't found at all, deny access (safe default)
   if (!doc) return false;
   return doc.is_available;
 }
 
-export async function resolveDocumentUrl(path: string, downloadName?: string, docId?: string): Promise<string> {
+function isDocumentAvailableByPathOrId(path: string, docId?: string): boolean {
+  const docs = getLocalDocuments();
+  const normalizedPath = path.startsWith("documents/") ? `/${path}` : path;
+  const doc = docId
+    ? docs.find((d) => d.id === docId)
+    : docs.find((d) => d.file_path === path || d.file_path === normalizedPath);
+  if (!doc) return false;
+  return doc.is_available;
+}
+
+async function verifyRemoteAvailability(path: string, docId?: string): Promise<boolean> {
+  try {
+    const { data: sess } = await withTimeout(supabase.auth.getSession(), 800);
+    if (!sess?.session) {
+      return isDocumentAvailableByPathOrId(path, docId);
+    }
+    const query = docId
+      ? supabase.from("documents").select("is_available").eq("id", docId).maybeSingle()
+      : supabase.from("documents").select("is_available").eq("file_path", path).maybeSingle();
+    const res = await withTimeout(query, 1000);
+    if (!res.error) {
+      return res.data?.is_available === true;
+    }
+  } catch {
+    // Supabase unreachable — rely on local availability state
+  }
+  return isDocumentAvailableByPathOrId(path, docId);
+}
+
+export async function resolveDocumentUrl(
+  path: string,
+  downloadName?: string,
+  docId?: string,
+  options?: { allowHidden?: boolean },
+): Promise<string> {
   if (!path) throw new Error("مسار الملف غير محدد");
 
-  // If a docId is provided, verify the document is still available before serving
-  if (docId && !isDocumentAvailable(docId)) {
+  const allowHidden = options?.allowHidden === true;
+
+  if (!allowHidden && !isDocumentAvailableByPathOrId(path, docId)) {
     throw new Error("هذا الملف غير متاح حاليًا");
+  }
+
+  const match = path.match(/docs\/([^/]+)\//);
+  const idbDocId = path.startsWith("idb:") ? path.replace("idb:", "") : undefined;
+  const extractedDocId = docId ?? idbDocId ?? match?.[1];
+
+  if (!allowHidden) {
+    const stillAvailable = await verifyRemoteAvailability(path, extractedDocId);
+    if (!stillAvailable) {
+      throw new Error("هذا الملف غير متاح حاليًا");
+    }
   }
 
   if (path.startsWith("blob:") || path.startsWith("data:") || path.startsWith("/")) {
@@ -337,10 +382,8 @@ export async function resolveDocumentUrl(path: string, downloadName?: string, do
     return `/${path}`;
   }
 
-  if (path.startsWith("idb:")) {
-    const idbDocId = path.replace("idb:", "");
-    // Re-check availability for the extracted docId
-    if (!isDocumentAvailable(idbDocId)) {
+  if (idbDocId) {
+    if (!allowHidden && !isDocumentAvailable(idbDocId)) {
       throw new Error("هذا الملف غير متاح حاليًا");
     }
     const blob = await getPdfBlob(idbDocId);
@@ -356,10 +399,8 @@ export async function resolveDocumentUrl(path: string, downloadName?: string, do
   }
 
   // Fallback: check if the docId is in the path and stored in IndexedDB
-  const match = path.match(/docs\/([^/]+)\//);
   if (match?.[1]) {
-    // Re-check availability for the extracted docId
-    if (!isDocumentAvailable(match[1])) {
+    if (!allowHidden && !isDocumentAvailable(match[1])) {
       throw new Error("هذا الملف غير متاح حاليًا");
     }
     const blob = await getPdfBlob(match[1]);
@@ -368,12 +409,12 @@ export async function resolveDocumentUrl(path: string, downloadName?: string, do
     if (fallback?.file_path) return fallback.file_path;
   }
 
-  // Try remote Supabase signed URL with timeout
+  // Try remote Supabase signed URL with short TTL (5 minutes) and timeout
   try {
     const res = await withTimeout(
       supabase.storage
         .from(BUCKET)
-        .createSignedUrl(path, 60 * 30, downloadName ? { download: downloadName } : undefined),
+        .createSignedUrl(path, 60 * 5, downloadName ? { download: downloadName } : undefined),
       1500,
     );
     if (!res.error && res.data?.signedUrl) return res.data.signedUrl;
@@ -383,7 +424,7 @@ export async function resolveDocumentUrl(path: string, downloadName?: string, do
 
   // Final fallback to matching default document if available
   const finalFallback = INITIAL_DOCUMENTS.find((d) => d.file_path === path || (d.id && path.includes(d.id)));
-  if (finalFallback?.file_path) {
+  if (finalFallback?.file_path && (allowHidden || isDocumentAvailable(finalFallback.id))) {
     return finalFallback.file_path;
   }
 

@@ -130,7 +130,7 @@ function DocumentManager() {
   async function viewCurrent(d: Doc) {
     if (!d.file_path) return;
     try {
-      const url = await signedUrl(d.file_path);
+      const url = await signedUrl(d.file_path, undefined, d.id, { allowHidden: true });
       setPreview({ title: d.title, url });
     } catch {
       toast.error("تعذر فتح الملف");

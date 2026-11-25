@@ -1,148 +1,147 @@
 import { useEffect, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
-import { verifyDemoCredentials } from "./accounts.functions";
+import { getServerSession, serverSignOut, verifyDemoCredentials } from "./accounts.functions";
 import { usernameToEmail } from "./auth-helpers";
 
 export type Role = "student" | "admin";
 
-const DEMO_STORAGE_KEY = "demo_portal_session";
-
-export interface DemoSession {
-  role: Role;
-  username: string;
-}
-
-export function getDemoSession(): DemoSession | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = localStorage.getItem(DEMO_STORAGE_KEY);
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
-}
-
-export function setDemoSession(session: DemoSession) {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(DEMO_STORAGE_KEY, JSON.stringify(session));
-}
+const LEGACY_DEMO_STORAGE_KEY = "demo_portal_session";
 
 export function clearDemoSession() {
   if (typeof window === "undefined") return;
-  localStorage.removeItem(DEMO_STORAGE_KEY);
+  try {
+    localStorage.removeItem(LEGACY_DEMO_STORAGE_KEY);
+  } catch {
+    // ignore
+  }
 }
 
-export async function portalSignIn(username: string, password: string) {
+export async function portalSignIn(
+  username: string,
+  password: string,
+): Promise<{ error: string | null; role: Role | null }> {
   const trimmedUser = username.trim();
   const trimmedPass = password.trim();
 
-  // All credential verification happens server-side via verifyDemoCredentials.
-  // No plaintext credentials or comparison logic in the client bundle.
+  // Clear any legacy unverified localStorage session
+  clearDemoSession();
+
+  // Verify credentials on the server (hashes & profile never ship to browser bundle)
   try {
     const result = await verifyDemoCredentials({ data: { username: trimmedUser, password: trimmedPass } });
     if (result.ok) {
-      setDemoSession({ role: result.role, username: result.username });
-      return { error: null };
+      if (result.mode === "otp" && result.tokenHash) {
+        await supabase.auth
+          .verifyOtp({ token_hash: result.tokenHash, type: "magiclink" })
+          .catch(() => {});
+      }
+      return { error: null, role: result.role };
     }
   } catch {
-    // Server unreachable — fall through to Supabase auth
+    // Server function error — fall through to Supabase password login
   }
 
-  // Non-demo account: try Supabase directly
+  // Non-demo account: try Supabase Auth directly
   const email = usernameToEmail(trimmedUser);
   try {
-    const { error } = await supabase.auth.signInWithPassword({ email, password: trimmedPass });
-    if (!error) {
-      clearDemoSession();
-      return { error: null };
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password: trimmedPass });
+    if (!error && data.user) {
+      const roles = await fetchRoles(data.user.id);
+      const role: Role | null = roles.includes("admin") && !roles.includes("student") ? "admin" : roles[0] ?? null;
+      return { error: null, role };
     }
   } catch {
     // network error
   }
 
-  return { error: "اسم المستخدم أو كلمة المرور غير صحيحة" };
+  return { error: "اسم المستخدم أو كلمة المرور غير صحيحة", role: null };
+}
+
+export async function portalSignOut(): Promise<void> {
+  clearDemoSession();
+  await Promise.allSettled([serverSignOut(), supabase.auth.signOut()]);
 }
 
 export async function fetchRoles(userId?: string): Promise<Role[]> {
-  const demo = getDemoSession();
-  if (demo) return [demo.role];
-  if (!userId) return [];
-  try {
-    const { data } = await supabase.from("user_roles").select("role").eq("user_id", userId);
-    return (data ?? []).map((r) => r.role as Role);
-  } catch {
-    return [];
+  if (userId) {
+    try {
+      const { data } = await supabase.from("user_roles").select("role").eq("user_id", userId);
+      const roles = (data ?? []).map((r) => r.role as Role);
+      if (roles.length > 0) return roles;
+    } catch {
+      // fall through to verified server session
+    }
   }
+  try {
+    const serverSession = await getServerSession();
+    if (serverSession) return [serverSession.role];
+  } catch {
+    // ignore
+  }
+  return [];
 }
 
 /** Session + role gate state for client-only protected layouts. */
 export function useRoleGate(required: Role) {
-  const checkDemo = (): { ok: boolean; session: Session | null } => {
-    const demo = getDemoSession();
-    if (demo && (demo.role === required || (required === "student" && demo.role === "student"))) {
-      return {
-        ok: true,
-        session: {
-          user: { id: "demo-" + demo.username, email: `${demo.username}@demo.local` },
-        } as unknown as Session,
-      };
-    }
-    return { ok: false, session: null };
-  };
-
-  const [state, setState] = useState<{ status: "loading" | "ok" | "denied"; session: Session | null }>(() => {
-    const init = checkDemo();
-    if (init.ok) return { status: "ok", session: init.session };
-    return { status: "loading", session: null };
+  const [state, setState] = useState<{ status: "loading" | "ok" | "denied"; session: Session | null }>({
+    status: "loading",
+    session: null,
   });
 
   useEffect(() => {
     let active = true;
 
-    const demoCheck = checkDemo();
-    if (demoCheck.ok) {
-      if (active && state.status !== "ok") {
-        setState({ status: "ok", session: demoCheck.session });
-      }
-      return;
-    }
+    // Remove any legacy client-side demo session key
+    clearDemoSession();
 
-    const check = async (session: Session | null) => {
-      const liveDemo = checkDemo();
-      if (liveDemo.ok) {
-        if (active) setState({ status: "ok", session: liveDemo.session });
-        return;
+    const verifyAuth = async (sbSession: Session | null) => {
+      if (sbSession) {
+        try {
+          const { data } = await supabase.auth.getUser();
+          if (data.user) {
+            const roles = await fetchRoles(data.user.id);
+            if (active) {
+              setState({ status: roles.includes(required) ? "ok" : "denied", session: sbSession });
+            }
+            return;
+          }
+        } catch {
+          // fall through to verified server cookie check
+        }
       }
 
-      if (!session) {
-        if (active) setState({ status: "denied", session: null });
-        return;
-      }
+      // Check server-verified HttpOnly session cookie
       try {
-        const { data } = await supabase.auth.getUser();
-        if (!data.user) {
-          if (active) setState({ status: "denied", session: null });
+        const serverSession = await getServerSession();
+        if (serverSession && serverSession.role === required) {
+          if (active) {
+            setState({
+              status: "ok",
+              session: {
+                user: { id: "session-" + serverSession.username, email: usernameToEmail(serverSession.username) },
+              } as unknown as Session,
+            });
+          }
           return;
         }
-        const roles = await fetchRoles(data.user.id);
-        if (active) setState({ status: roles.includes(required) ? "ok" : "denied", session });
       } catch {
-        if (active) setState({ status: "denied", session: null });
+        // ignore
       }
+
+      if (active) setState({ status: "denied", session: null });
     };
 
-    supabase.auth.getSession().then(({ data }) => check(data.session)).catch(() => check(null));
+    supabase.auth
+      .getSession()
+      .then(({ data }) => verifyAuth(data.session))
+      .catch(() => verifyAuth(null));
 
     const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
-      // NEVER let a Supabase event wipe out a demo session
-      const liveDemo = checkDemo();
-      if (liveDemo.ok) return;
-
       if (event === "SIGNED_OUT") {
-        if (active) setState({ status: "denied", session: null });
+        verifyAuth(null);
       } else if (event === "SIGNED_IN") {
-        check(session);
+        verifyAuth(session);
       }
     });
 
@@ -150,7 +149,7 @@ export function useRoleGate(required: Role) {
       active = false;
       sub.subscription.unsubscribe();
     };
-  }, [required, state.status]);
+  }, [required]);
 
   return state;
 }

@@ -33,13 +33,13 @@ function DocumentCard({
   };
 }) {
   const [downloading, setDownloading] = useState(false);
-  const has = !!d.file_path;
+  const has = !!d.file_path && d.is_available;
 
   async function handleDownload() {
     if (!d.file_path) return;
     setDownloading(true);
     try {
-      await downloadDocument(d.file_path, `${d.title}.pdf`);
+      await downloadDocument(d.file_path, `${d.title}.pdf`, d.id);
     } catch {
       toast.error("تعذر تحميل الملف");
     } finally {

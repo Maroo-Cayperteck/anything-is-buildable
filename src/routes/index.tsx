@@ -1,8 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { LoginCard } from "@/components/portal/LoginCard";
 import { Button } from "@/components/ui/button";
-import { portalSignIn, fetchRoles, getDemoSession, type Role } from "@/lib/session";
-import { supabase } from "@/integrations/supabase/client";
+import { portalSignIn } from "@/lib/session";
 
 export const Route = createFileRoute("/")({
   ssr: false,
@@ -27,23 +26,10 @@ function Login() {
       title="مرحبًا بعودتك"
       subtitle="سجّل الدخول إلى بوابة الطالب"
       onSubmit={async (u, p) => {
-        const { error } = await portalSignIn(u, p);
+        const { error, role } = await portalSignIn(u, p);
         if (error) return error;
 
-        const demo = getDemoSession();
-        if (demo) {
-          navigate({ to: demo.role === "admin" ? "/admin" : "/portal", replace: true });
-          return null;
-        }
-
-        let roles: Role[] = [];
-        try {
-          const { data } = await supabase.auth.getUser();
-          roles = await fetchRoles(data?.user?.id);
-        } catch {
-          roles = await fetchRoles();
-        }
-        navigate({ to: roles.includes("admin") && !roles.includes("student") ? "/admin" : "/portal", replace: true });
+        navigate({ to: role === "admin" ? "/admin" : "/portal", replace: true });
         return null;
       }}
       footer={

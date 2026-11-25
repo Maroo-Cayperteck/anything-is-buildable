@@ -27,17 +27,17 @@ function Viewer() {
   const [downloading, setDownloading] = useState(false);
 
   const url = useQuery({
-    queryKey: ["signed", doc?.file_path],
+    queryKey: ["signed", doc?.id, doc?.file_path, doc?.is_available],
     queryFn: () => signedUrl(doc!.file_path!, undefined, doc!.id),
     enabled: !!doc?.file_path && doc.is_available,
-    staleTime: 10 * 60 * 1000,
+    staleTime: 0,
   });
 
   async function handleDownload() {
-    if (!doc?.file_path) return;
+    if (!doc?.file_path || !doc.is_available) return;
     setDownloading(true);
     try {
-      await downloadDocument(doc.file_path, `${doc.title}.pdf`);
+      await downloadDocument(doc.file_path, `${doc.title}.pdf`, doc.id);
     } catch {
       toast.error("تعذر تحميل الملف");
     } finally {
@@ -54,7 +54,7 @@ function Viewer() {
           </Link>
         </Button>
         <h2 className="text-lg font-semibold">{doc?.title ?? "معاينة الملف"}</h2>
-        {doc?.file_path && (
+        {doc?.file_path && doc.is_available && (
           <Button
             variant="outline"
             size="sm"

@@ -92,8 +92,7 @@ export const REGISTERED_COURSES = Array.from(
   }, new Map<string, { course: string; lecturer: string; kinds: Set<SlotKind>; weeklyHours: number }>()).values(),
 );
 
-import { STUDENT_PROFILE } from "./accounts.functions";
-import { getDemoSession } from "./session";
+import { getStudentProfile } from "./accounts.functions";
 
 export const DEFAULT_DOCUMENTS = [
   {
@@ -137,10 +136,6 @@ export const DEFAULT_DOCUMENTS = [
 export const profileQuery = queryOptions({
   queryKey: ["profile"],
   queryFn: async () => {
-    const demo = getDemoSession();
-    if (demo && demo.role === "student") {
-      return STUDENT_PROFILE;
-    }
     try {
       const { data: u } = await supabase.auth.getUser();
       if (u?.user) {
@@ -148,9 +143,9 @@ export const profileQuery = queryOptions({
         if (!error && data) return data;
       }
     } catch {
-      // fallback below
+      // fall through to verified server session
     }
-    return STUDENT_PROFILE;
+    return await getStudentProfile();
   },
 });
 
@@ -163,8 +158,13 @@ export const documentsQuery = queryOptions({
   initialData: () => getLocalDocuments(),
 });
 
-export async function signedUrl(path: string, download?: string, docId?: string) {
-  return resolveDocumentUrl(path, download, docId);
+export async function signedUrl(
+  path: string,
+  download?: string,
+  docId?: string,
+  options?: { allowHidden?: boolean },
+) {
+  return resolveDocumentUrl(path, download, docId, options);
 }
 
 export function formatSize(bytes?: number | null) {

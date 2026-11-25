@@ -7,13 +7,13 @@ import { resolveDocumentUrl } from "./documents-storage";
  * For remote signed URLs we fetch the bytes locally first to
  * ensure the `download` attribute works (cross-origin restrictions).
  */
-export async function downloadDocument(path: string, fileName: string) {
+export async function downloadDocument(path: string, fileName: string, docId?: string) {
   const safeFileName = fileName.toLowerCase().endsWith(".pdf") ? fileName : `${fileName}.pdf`;
   let createdBlobUrl: string | null = null;
 
   try {
     // Resolve to a usable URL (idb → blob, remote → signed)
-    const resolvedUrl = await resolveDocumentUrl(path, safeFileName);
+    const resolvedUrl = await resolveDocumentUrl(path, safeFileName, docId);
 
     let downloadUrl = resolvedUrl;
 
