@@ -31,7 +31,7 @@ export const STUDENT_PROFILE = {
   academic_year: "2026 / 2027",
   gender: "ذكر",
   phone: null,
-  cgpa: 1.31,
+  cgpa: 2.7,
   earned_hours: 28,
   created_at: "2026-10-22T00:00:00.000Z",
   extra: {
