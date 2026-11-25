@@ -32,9 +32,14 @@ export async function portalSignIn(
     const result = await verifyDemoCredentials({ data: { username: trimmedUser, password: trimmedPass } });
     if (result.ok) {
       if (result.mode === "otp" && result.tokenHash) {
-        await supabase.auth
+        const { error: otpErr } = await supabase.auth
           .verifyOtp({ token_hash: result.tokenHash, type: "magiclink" })
-          .catch(() => {});
+          .catch(() => ({ error: new Error("otp") }));
+        if (otpErr) {
+          await supabase.auth.signOut().catch(() => {});
+        }
+      } else {
+        await supabase.auth.signOut().catch(() => {});
       }
       return { error: null, role: result.role };
     }
@@ -101,10 +106,10 @@ export function useRoleGate(required: Role) {
           const { data } = await supabase.auth.getUser();
           if (data.user) {
             const roles = await fetchRoles(data.user.id);
-            if (active) {
-              setState({ status: roles.includes(required) ? "ok" : "denied", session: sbSession });
+            if (roles.includes(required)) {
+              if (active) setState({ status: "ok", session: sbSession });
+              return;
             }
-            return;
           }
         } catch {
           // fall through to verified server cookie check

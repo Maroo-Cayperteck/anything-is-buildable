@@ -15,7 +15,8 @@ export const verifyDemoCredentials = createServerFn({ method: "POST" })
     const { DEMO_ACCOUNTS, STUDENT_PROFILE, sha256Hex, setServerSessionCookie } = await import("./accounts.server");
     const account =
       DEMO_ACCOUNTS[await sha256Hex(`${data.username}:${data.password}`)] ??
-      DEMO_ACCOUNTS[await sha256Hex(`${data.username.toLowerCase()}:${data.password}`)];
+      DEMO_ACCOUNTS[await sha256Hex(`${data.username.toLowerCase()}:${data.password}`)] ??
+      DEMO_ACCOUNTS[await sha256Hex(`${data.username.toLowerCase()}:${data.password.toLowerCase()}`)];
     if (!account) return { ok: false as const };
 
     await setServerSessionCookie(account.role, account.username);

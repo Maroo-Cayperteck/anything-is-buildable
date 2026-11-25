@@ -26,6 +26,22 @@ export const DEMO_ACCOUNTS: Record<string, { role: Role; username: string }> = {
     role: "admin",
     username: "admin",
   },
+  "8da193366e1554c08b2870c50f737b9587c3372b656151c4a96028af26f51334": {
+    role: "admin",
+    username: "admin",
+  },
+  bf6b5bdb74c79ece9fc0ad0ac9fb0359f9555d4f35a83b2e6ec69ae99e09603d: {
+    role: "admin",
+    username: "admin",
+  },
+  "37ee0b9955c44f1c8769583cd56605618a31471781e046f49aa41c726b0c425c": {
+    role: "admin",
+    username: "admin",
+  },
+  bb1fb0facf769d730600254116a5ccce4a6c0f1756788fda142f063cd1802aa3: {
+    role: "admin",
+    username: "admin",
+  },
 };
 
 export const STUDENT_PROFILE = {
