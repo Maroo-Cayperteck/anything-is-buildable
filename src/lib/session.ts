@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
-import { ensureDemoAccount } from "./accounts.functions";
+import { verifyDemoCredentials } from "./accounts.functions";
 import { usernameToEmail } from "./auth-helpers";
 
 export type Role = "student" | "admin";
@@ -37,30 +37,20 @@ export async function portalSignIn(username: string, password: string) {
   const trimmedUser = username.trim();
   const trimmedPass = password.trim();
 
-  // Student credentials check:
-  // National ID: "30706232100316", Student Code: "925250059"
-  // Allow either National ID or Student Code as username, and either as password
-  const isStudentUser = trimmedUser === "30706232100316" || trimmedUser === "925250059";
-  const isStudentPass = trimmedPass === "925250059" || trimmedPass === "30706232100316";
-  const isStudentDemo = isStudentUser && isStudentPass;
-
-  // Admin credentials check:
-  const isAdminUser = trimmedUser.toLowerCase() === "admin";
-  const isAdminPass = ["admin", "admin123", "admin@123", "password"].includes(trimmedPass.toLowerCase());
-  const isAdminDemo = isAdminUser && isAdminPass;
-
-  if (isStudentDemo) {
-    setDemoSession({ role: "student", username: "30706232100316" });
-    return { error: null };
-  }
-
-  if (isAdminDemo) {
-    setDemoSession({ role: "admin", username: "admin" });
-    return { error: null };
+  // All credential verification happens server-side via verifyDemoCredentials.
+  // No plaintext credentials or comparison logic in the client bundle.
+  try {
+    const result = await verifyDemoCredentials({ data: { username: trimmedUser, password: trimmedPass } });
+    if (result.ok) {
+      setDemoSession({ role: result.role, username: result.username });
+      return { error: null };
+    }
+  } catch {
+    // Server unreachable — fall through to Supabase auth
   }
 
   // Non-demo account: try Supabase directly
-  const email = usernameToEmail(username);
+  const email = usernameToEmail(trimmedUser);
   try {
     const { error } = await supabase.auth.signInWithPassword({ email, password: trimmedPass });
     if (!error) {

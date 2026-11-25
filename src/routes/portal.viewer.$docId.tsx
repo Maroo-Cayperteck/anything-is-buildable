@@ -28,8 +28,8 @@ function Viewer() {
 
   const url = useQuery({
     queryKey: ["signed", doc?.file_path],
-    queryFn: () => signedUrl(doc!.file_path!),
-    enabled: !!doc?.file_path,
+    queryFn: () => signedUrl(doc!.file_path!, undefined, doc!.id),
+    enabled: !!doc?.file_path && doc.is_available,
     staleTime: 10 * 60 * 1000,
   });
 

@@ -42,7 +42,13 @@ export const STUDENT_PROFILE = {
   },
 };
 
-export const ensureDemoAccount = createServerFn({ method: "POST" })
+/**
+ * Server-side credential verification. The client sends username+password,
+ * the server hashes them and checks the SHA-256 against DEMO_ACCOUNTS.
+ * No credentials are ever exposed in the browser bundle.
+ * Returns { ok, role, username } on success, { ok: false } on failure.
+ */
+export const verifyDemoCredentials = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) =>
     z.object({ username: z.string().trim().min(1).max(64), password: z.string().min(1).max(128) }).parse(d),
   )
@@ -68,5 +74,8 @@ export const ensureDemoAccount = createServerFn({ method: "POST" })
     if (account.role === "student") {
       await supabaseAdmin.from("student_profiles").upsert({ ...STUDENT_PROFILE, user_id: user.id }, { onConflict: "user_id" });
     }
-    return { ok: true as const };
+    return { ok: true as const, role: account.role, username: account.username };
   });
+
+/** @deprecated Use verifyDemoCredentials instead */
+export const ensureDemoAccount = verifyDemoCredentials;

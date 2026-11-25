@@ -163,8 +163,8 @@ export const documentsQuery = queryOptions({
   initialData: () => getLocalDocuments(),
 });
 
-export async function signedUrl(path: string, download?: string) {
-  return resolveDocumentUrl(path, download);
+export async function signedUrl(path: string, download?: string, docId?: string) {
+  return resolveDocumentUrl(path, download, docId);
 }
 
 export function formatSize(bytes?: number | null) {

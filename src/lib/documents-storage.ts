@@ -309,8 +309,25 @@ export async function reorderDocumentList(list: Doc[]): Promise<void> {
   ).catch(() => {});
 }
 
-export async function resolveDocumentUrl(path: string, downloadName?: string): Promise<string> {
+/**
+ * Checks whether the document identified by docId is currently available.
+ * Hidden documents (is_available === false) must NOT be served to students.
+ */
+export function isDocumentAvailable(docId: string): boolean {
+  const docs = getLocalDocuments();
+  const doc = docs.find((d) => d.id === docId);
+  // If the doc isn't found at all, deny access (safe default)
+  if (!doc) return false;
+  return doc.is_available;
+}
+
+export async function resolveDocumentUrl(path: string, downloadName?: string, docId?: string): Promise<string> {
   if (!path) throw new Error("مسار الملف غير محدد");
+
+  // If a docId is provided, verify the document is still available before serving
+  if (docId && !isDocumentAvailable(docId)) {
+    throw new Error("هذا الملف غير متاح حاليًا");
+  }
 
   if (path.startsWith("blob:") || path.startsWith("data:") || path.startsWith("/")) {
     return path;
@@ -321,13 +338,17 @@ export async function resolveDocumentUrl(path: string, downloadName?: string): P
   }
 
   if (path.startsWith("idb:")) {
-    const docId = path.replace("idb:", "");
-    const blob = await getPdfBlob(docId);
+    const idbDocId = path.replace("idb:", "");
+    // Re-check availability for the extracted docId
+    if (!isDocumentAvailable(idbDocId)) {
+      throw new Error("هذا الملف غير متاح حاليًا");
+    }
+    const blob = await getPdfBlob(idbDocId);
     if (blob) {
       return URL.createObjectURL(blob);
     }
     // Fallback if accessed on a different device (like mobile): check bundled server file
-    const fallback = INITIAL_DOCUMENTS.find((d) => d.id === docId);
+    const fallback = INITIAL_DOCUMENTS.find((d) => d.id === idbDocId);
     if (fallback?.file_path) {
       return fallback.file_path;
     }
@@ -337,6 +358,10 @@ export async function resolveDocumentUrl(path: string, downloadName?: string): P
   // Fallback: check if the docId is in the path and stored in IndexedDB
   const match = path.match(/docs\/([^/]+)\//);
   if (match?.[1]) {
+    // Re-check availability for the extracted docId
+    if (!isDocumentAvailable(match[1])) {
+      throw new Error("هذا الملف غير متاح حاليًا");
+    }
     const blob = await getPdfBlob(match[1]);
     if (blob) return URL.createObjectURL(blob);
     const fallback = INITIAL_DOCUMENTS.find((d) => d.id === match[1]);
