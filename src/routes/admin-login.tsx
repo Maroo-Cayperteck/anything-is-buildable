@@ -27,7 +27,6 @@ function AdminLogin() {
       onSubmit={async (u, p) => {
         const { error, role } = await portalSignIn(u, p);
         if (error) return error;
-
         if (role !== "admin") {
           await portalSignOut();
           return "هذا الحساب لا يملك صلاحيات المسؤول";
