@@ -38,7 +38,16 @@ function PortalLayout() {
           <Loader2 className="h-6 w-6 animate-spin" />
         </div>
       ) : snapshot.isError || !p ? (
-        <div className="rounded-xl border bg-card p-8 text-center text-destructive">تعذر تحميل بيانات الطالب.</div>
+        <div className="space-y-4 rounded-xl border bg-card p-8 text-center">
+          <p className="text-destructive">تعذر تحميل بيانات الطالب.</p>
+          <button
+            type="button"
+            onClick={() => snapshot.refetch()}
+            className="inline-flex items-center justify-center rounded-lg border bg-background px-4 py-2 text-sm font-medium hover:bg-accent"
+          >
+            إعادة المحاولة
+          </button>
+        </div>
       ) : (
         <Outlet />
       )}

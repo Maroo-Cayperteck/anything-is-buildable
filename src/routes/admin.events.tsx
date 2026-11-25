@@ -267,9 +267,13 @@ function AdminEventsPage() {
                     variant="ghost"
                     className="text-destructive"
                     onClick={async () => {
-                      await adminDeleteAnnouncement({ data: { id: a.id } });
-                      await refresh();
-                      toast.success("تم حذف الإعلان");
+                      try {
+                        await adminDeleteAnnouncement({ data: { id: a.id } });
+                        await refresh();
+                        toast.success("تم حذف الإعلان");
+                      } catch (err) {
+                        toast.error(err instanceof Error ? err.message : "تعذر حذف الإعلان");
+                      }
                     }}
                   >
                     <Trash2 className="h-4 w-4" />
@@ -300,23 +304,27 @@ function AdminEventsPage() {
                     size="sm"
                     variant="outline"
                     onClick={async () => {
-                      await adminUpsertAcademicEvent({
-                        data: {
-                          id: ev.id,
-                          title: ev.title,
-                          description: ev.description ?? "",
-                          event_type: ev.event_type,
-                          starts_at: ev.starts_at,
-                          ends_at: ev.ends_at,
-                          location: ev.location ?? "",
-                          audience_scope: ev.audience_scope,
-                          program_id: ev.program_id,
-                          level_id: ev.level_id,
-                          target_student_user_id: ev.target_student_user_id,
-                          is_published: !ev.is_published,
-                        },
-                      });
-                      await refresh();
+                      try {
+                        await adminUpsertAcademicEvent({
+                          data: {
+                            id: ev.id,
+                            title: ev.title,
+                            description: ev.description ?? "",
+                            event_type: ev.event_type,
+                            starts_at: ev.starts_at,
+                            ends_at: ev.ends_at,
+                            location: ev.location ?? "",
+                            audience_scope: ev.audience_scope,
+                            program_id: ev.program_id,
+                            level_id: ev.level_id,
+                            target_student_user_id: ev.target_student_user_id,
+                            is_published: !ev.is_published,
+                          },
+                        });
+                        await refresh();
+                      } catch (err) {
+                        toast.error(err instanceof Error ? err.message : "تعذر التحديث");
+                      }
                     }}
                   >
                     {ev.is_published ? "إخفاء" : "نشر"}
@@ -326,9 +334,13 @@ function AdminEventsPage() {
                     variant="ghost"
                     className="text-destructive"
                     onClick={async () => {
-                      await adminDeleteAcademicEvent({ data: { id: ev.id } });
-                      await refresh();
-                      toast.success("تم حذف الفعالية");
+                      try {
+                        await adminDeleteAcademicEvent({ data: { id: ev.id } });
+                        await refresh();
+                        toast.success("تم حذف الفعالية");
+                      } catch (err) {
+                        toast.error(err instanceof Error ? err.message : "تعذر حذف الفعالية");
+                      }
                     }}
                   >
                     <Trash2 className="h-4 w-4" />

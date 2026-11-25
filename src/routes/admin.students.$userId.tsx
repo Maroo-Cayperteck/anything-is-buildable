@@ -106,8 +106,14 @@ function AdminStudentDetail() {
   }, [p]);
 
   const refresh = async () => {
-    await qc.invalidateQueries({ queryKey: ["admin-student-detail", userId] });
-    await qc.invalidateQueries({ queryKey: ["admin-students"] });
+    await Promise.all([
+      qc.invalidateQueries({ queryKey: ["admin-student-detail", userId] }),
+      qc.invalidateQueries({ queryKey: ["admin-students"] }),
+      qc.invalidateQueries({ queryKey: ["student-documents-bundle"] }),
+      qc.invalidateQueries({ queryKey: ["admin-overview"] }),
+      qc.invalidateQueries({ queryKey: ["signed-doc"] }),
+    ]);
+    await qc.refetchQueries({ queryKey: ["admin-student-detail", userId] }, { throwOnError: true });
   };
 
   async function saveProfile(e: React.FormEvent) {
@@ -354,9 +360,13 @@ function AdminStudentDetail() {
                     variant="ghost"
                     className="text-destructive"
                     onClick={async () => {
-                      await adminRemoveEnrollment({ data: { id: enr.id } });
-                      await refresh();
-                      toast.success("تم إلغاء التسجيل");
+                      try {
+                        await adminRemoveEnrollment({ data: { id: enr.id } });
+                        await refresh();
+                        toast.success("تم إلغاء التسجيل");
+                      } catch (err) {
+                        toast.error(err instanceof Error ? err.message : "تعذر إلغاء التسجيل");
+                      }
                     }}
                   >
                     <Trash2 className="h-4 w-4" />
@@ -421,8 +431,14 @@ function AdminStudentDetail() {
                     size="sm"
                     variant="outline"
                     onClick={async () => {
-                      await togglePrivateStudentDocument(d.id, !d.is_available);
-                      await refresh();
+                      try {
+                        const nextState = !d.is_available;
+                        await togglePrivateStudentDocument(d.id, nextState);
+                        await refresh();
+                        toast.success(nextState ? "تمت إتاحة الملف الخاص للطالب" : "تم إخفاء الملف الخاص عن الطالب");
+                      } catch (err) {
+                        toast.error(err instanceof Error ? err.message : "تعذر تغيير حالة الملف");
+                      }
                     }}
                   >
                     {d.is_available ? "إخفاء" : "إتاحة"}
@@ -432,9 +448,13 @@ function AdminStudentDetail() {
                     variant="ghost"
                     className="text-destructive"
                     onClick={async () => {
-                      await deletePrivateStudentDocument(d.id);
-                      await refresh();
-                      toast.success("تم حذف الملف الخاص");
+                      try {
+                        await deletePrivateStudentDocument(d.id);
+                        await refresh();
+                        toast.success("تم حذف الملف الخاص");
+                      } catch (err) {
+                        toast.error(err instanceof Error ? err.message : "تعذر حذف الملف الخاص");
+                      }
                     }}
                   >
                     <Trash2 className="h-4 w-4" />
@@ -549,10 +569,14 @@ function AdminStudentDetail() {
               onClick={async (e) => {
                 e.preventDefault();
                 if (!confirmSuspend) return;
-                await adminSetStudentAccountStatus({ data: { userId, status: confirmSuspend } });
-                setConfirmSuspend(null);
-                await refresh();
-                toast.success("تم تحديث حالة الحساب");
+                try {
+                  await adminSetStudentAccountStatus({ data: { userId, status: confirmSuspend } });
+                  setConfirmSuspend(null);
+                  await refresh();
+                  toast.success("تم تحديث حالة الحساب");
+                } catch (err) {
+                  toast.error(err instanceof Error ? err.message : "تعذر تحديث حالة الحساب");
+                }
               }}
             >
               تأكيد

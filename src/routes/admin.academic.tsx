@@ -416,9 +416,13 @@ function AdminAcademicPage() {
                     variant="ghost"
                     className="text-destructive"
                     onClick={async () => {
-                      await adminDeleteLecture({ data: { id: lec.id } });
-                      await refresh();
-                      toast.success("تم حذف الحصة");
+                      try {
+                        await adminDeleteLecture({ data: { id: lec.id } });
+                        await refresh();
+                        toast.success("تم حذف الحصة");
+                      } catch (err) {
+                        toast.error(err instanceof Error ? err.message : "تعذر حذف الحصة");
+                      }
                     }}
                   >
                     <Trash2 className="h-4 w-4" />

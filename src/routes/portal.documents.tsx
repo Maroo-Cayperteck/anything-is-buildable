@@ -108,7 +108,7 @@ function DocumentCard({
 }
 
 function Documents() {
-  const { data, isLoading, isError } = useQuery(studentDocumentsQuery);
+  const { data, isLoading, isError, refetch } = useQuery(studentDocumentsQuery);
 
   if (isLoading) {
     return (
@@ -118,7 +118,14 @@ function Documents() {
     );
   }
   if (isError) {
-    return <div className="rounded-xl border bg-card p-8 text-center text-destructive">تعذر تحميل قائمة الملفات.</div>;
+    return (
+      <div className="space-y-4 rounded-xl border bg-card p-8 text-center">
+        <p className="text-destructive">تعذر تحميل قائمة الملفات.</p>
+        <Button variant="outline" onClick={() => refetch()}>
+          إعادة المحاولة
+        </Button>
+      </div>
+    );
   }
 
   const shared = data?.shared ?? [];

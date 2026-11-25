@@ -1,11 +1,13 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { Database, Tables } from "@/integrations/supabase/types";
 import {
+  adminCleanupOrphanUpload,
   adminCommitPrivateStudentUpload,
   adminCommitSharedUpload,
   adminCreateDocument,
   adminDeleteDocument,
   adminDeletePrivateStudentDocument,
+  adminListDocuments,
   adminPreparePdfUpload,
   adminReorderDocuments,
   adminUpdateDocument,
@@ -35,11 +37,7 @@ export function validatePdfFileClient(file: File) {
 }
 
 export async function fetchAllDocuments(): Promise<Doc[]> {
-  const { data, error } = await supabase.from("documents").select("*").order("sort_order", { ascending: true });
-  if (error) {
-    throw new Error(error.message || "تعذر جلب قائمة الملفات من الخادم");
-  }
-  return data ?? [];
+  return await adminListDocuments();
 }
 
 export async function createDocument(input: {
@@ -72,6 +70,26 @@ export async function updateDocumentFields(
   return await adminUpdateDocument({ data: { id, ...updates } });
 }
 
+async function uploadFileToPreparedBucket(
+  prepared: { bucket: string; storagePath: string; uploadToken?: string },
+  file: File,
+  fallbackError: string,
+) {
+  const bucketClient = supabase.storage.from(prepared.bucket);
+  const { error: uploadError } = prepared.uploadToken
+    ? await bucketClient.uploadToSignedUrl(prepared.storagePath, prepared.uploadToken, file, {
+        contentType: "application/pdf",
+      })
+    : await bucketClient.upload(prepared.storagePath, file, {
+        contentType: "application/pdf",
+        upsert: false,
+      });
+
+  if (uploadError) {
+    throw new Error(uploadError.message || fallbackError);
+  }
+}
+
 /**
  * Uploads a PDF to Supabase Storage, awaits verification and DB persistence,
  * and cleans up old or orphaned objects cleanly. Never reports success early.
@@ -89,26 +107,24 @@ export async function uploadAndPublishDocument(docId: string, file: File): Promi
     },
   });
 
-  const { error: uploadError } = await supabase.storage
-    .from(prepared.bucket)
-    .upload(prepared.storagePath, file, {
-      contentType: "application/pdf",
-      upsert: false,
+  await uploadFileToPreparedBucket(prepared, file, "فشل رفع الملف إلى وحدة التخزين");
+
+  try {
+    return await adminCommitSharedUpload({
+      data: {
+        docId,
+        storagePath: prepared.storagePath,
+        fileName: prepared.safeFileName,
+        fileSize: file.size,
+        previousPath: prepared.previousPath,
+      },
     });
-
-  if (uploadError) {
-    throw new Error(uploadError.message || "فشل رفع الملف إلى وحدة التخزين");
+  } catch (commitError) {
+    await adminCleanupOrphanUpload({
+      data: { kind: "shared", storagePath: prepared.storagePath },
+    }).catch(() => {});
+    throw commitError;
   }
-
-  return await adminCommitSharedUpload({
-    data: {
-      docId,
-      storagePath: prepared.storagePath,
-      fileName: prepared.safeFileName,
-      fileSize: file.size,
-      previousPath: prepared.previousPath,
-    },
-  });
 }
 
 export async function uploadPrivateStudentDocument(input: {
@@ -129,28 +145,26 @@ export async function uploadPrivateStudentDocument(input: {
     },
   });
 
-  const { error: uploadError } = await supabase.storage
-    .from(prepared.bucket)
-    .upload(prepared.storagePath, input.file, {
-      contentType: "application/pdf",
-      upsert: false,
+  await uploadFileToPreparedBucket(prepared, input.file, "فشل رفع ملف الطالب الخاص");
+
+  try {
+    return await adminCommitPrivateStudentUpload({
+      data: {
+        studentUserId: input.studentUserId,
+        title: input.title,
+        description: input.description ?? "",
+        storagePath: prepared.storagePath,
+        fileName: prepared.safeFileName,
+        fileSize: input.file.size,
+        isAvailable: true,
+      },
     });
-
-  if (uploadError) {
-    throw new Error(uploadError.message || "فشل رفع ملف الطالب الخاص");
+  } catch (commitError) {
+    await adminCleanupOrphanUpload({
+      data: { kind: "private", storagePath: prepared.storagePath },
+    }).catch(() => {});
+    throw commitError;
   }
-
-  return await adminCommitPrivateStudentUpload({
-    data: {
-      studentUserId: input.studentUserId,
-      title: input.title,
-      description: input.description ?? "",
-      storagePath: prepared.storagePath,
-      fileName: prepared.safeFileName,
-      fileSize: input.file.size,
-      isAvailable: true,
-    },
-  });
 }
 
 export async function togglePrivateStudentDocument(id: string, is_available: boolean) {

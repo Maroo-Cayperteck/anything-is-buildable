@@ -310,7 +310,7 @@ const listStudentsSchema = z.object({
   levelId: z.string().uuid().optional().or(z.literal("")),
   status: z.enum(["pending", "active", "rejected", "suspended"]).optional().or(z.literal("")),
   page: z.number().int().min(1).optional().default(1),
-  pageSize: z.number().int().min(5).max(50).optional().default(20),
+  pageSize: z.number().int().min(5).max(200).optional().default(20),
 });
 
 export const listAdminStudents = createServerFn({ method: "GET" })

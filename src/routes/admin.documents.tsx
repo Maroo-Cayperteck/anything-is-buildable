@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { ArrowDown, ArrowUp, Eye, FileText, Loader2, Plus, Save, Trash2, Upload } from "lucide-react";
 import { Card } from "@/components/portal/Shell";
@@ -44,18 +44,24 @@ function DocumentManager() {
   const catalog = useQuery({ queryKey: ["admin-academic-catalog"], queryFn: () => getAcademicCatalog() });
   const students = useQuery({
     queryKey: ["admin-students-picker"],
-    queryFn: () => listAdminStudents({ data: { page: 1, pageSize: 50 } }),
+    queryFn: () => listAdminStudents({ data: { page: 1, pageSize: 100 } }),
   });
 
   const [preview, setPreview] = useState<{ title: string; url: string; onPublish?: () => Promise<void> } | null>(null);
   const [publishing, setPublishing] = useState(false);
   const [adding, setAdding] = useState(false);
+  const [reordering, setReordering] = useState(false);
   const [toDelete, setToDelete] = useState<Doc | null>(null);
   const [deleting, setDeleting] = useState(false);
 
   const refresh = async () => {
-    await qc.invalidateQueries({ queryKey: ["documents"] });
-    await qc.refetchQueries({ queryKey: ["documents"] });
+    await Promise.all([
+      qc.invalidateQueries({ queryKey: ["documents"] }),
+      qc.invalidateQueries({ queryKey: ["student-documents-bundle"] }),
+      qc.invalidateQueries({ queryKey: ["admin-overview"] }),
+      qc.invalidateQueries({ queryKey: ["signed-doc"] }),
+    ]);
+    await qc.refetchQueries({ queryKey: ["documents"] }, { throwOnError: true });
   };
 
   async function addDoc() {
@@ -72,7 +78,7 @@ function DocumentManager() {
   }
 
   async function move(i: number, dir: -1 | 1) {
-    if (!data) return;
+    if (!data || reordering) return;
     const targetIdx = i + dir;
     if (targetIdx < 0 || targetIdx >= data.length) return;
     const next = [...data];
@@ -81,11 +87,15 @@ function DocumentManager() {
     if (!temp || !target) return;
     next[i] = target;
     next[targetIdx] = temp;
+    setReordering(true);
     try {
       await reorderDocumentList(next);
       await refresh();
+      toast.success("تم حفظ ترتيب الملفات");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "تعذر حفظ الترتيب");
+    } finally {
+      setReordering(false);
     }
   }
 
@@ -156,7 +166,14 @@ function DocumentManager() {
   }
 
   if (isError) {
-    return <div className="rounded-xl border bg-card p-8 text-center text-destructive">تعذر تحميل الملفات من الخادم.</div>;
+    return (
+      <div className="space-y-4 rounded-xl border bg-card p-8 text-center">
+        <p className="text-destructive">تعذر تحميل الملفات من الخادم.</p>
+        <Button variant="outline" onClick={() => refresh().catch(() => {})}>
+          إعادة المحاولة
+        </Button>
+      </div>
+    );
   }
 
   return (
@@ -179,8 +196,8 @@ function DocumentManager() {
           <DocRow
             key={d.id}
             doc={d}
-            first={i === 0}
-            last={i === data.length - 1}
+            first={i === 0 || reordering}
+            last={i === data.length - 1 || reordering}
             programs={catalog.data?.programs ?? []}
             levels={catalog.data?.levels ?? []}
             offerings={catalog.data?.offerings ?? []}
@@ -285,7 +302,7 @@ function DocRow({
 }) {
   const [title, setTitle] = useState(doc.title);
   const [desc, setDesc] = useState(doc.description ?? "");
-  const [audience, setAudience] = useState<AudienceScope>(doc.audience_scope);
+  const [audience, setAudience] = useState<AudienceScope>(doc.audience_scope ?? "all");
   const [programId, setProgramId] = useState<string>(doc.program_id ?? "");
   const [levelId, setLevelId] = useState<string>(doc.level_id ?? "");
   const [targetStudentId, setTargetStudentId] = useState<string>(doc.target_student_user_id ?? "");
@@ -295,19 +312,46 @@ function DocRow({
   const [toggling, setToggling] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
+  useEffect(() => {
+    setTitle(doc.title);
+    setDesc(doc.description ?? "");
+    setAudience(doc.audience_scope ?? "all");
+    setProgramId(doc.program_id ?? "");
+    setLevelId(doc.level_id ?? "");
+    setTargetStudentId(doc.target_student_user_id ?? "");
+    setOfferingId(doc.offering_id ?? "");
+    setCategory((doc.doc_category as DocCategory) || "general");
+  }, [doc]);
+
+  const effectiveProgramId = audience === "program" ? programId || null : null;
+  const effectiveLevelId = audience === "level" ? levelId || null : null;
+  const effectiveTargetStudentId = audience === "student" ? targetStudentId || null : null;
+
   const dirty =
     title !== doc.title ||
     desc !== (doc.description ?? "") ||
-    audience !== doc.audience_scope ||
-    (programId || null) !== doc.program_id ||
-    (levelId || null) !== doc.level_id ||
-    (targetStudentId || null) !== doc.target_student_user_id ||
+    audience !== (doc.audience_scope ?? "all") ||
+    effectiveProgramId !== doc.program_id ||
+    effectiveLevelId !== doc.level_id ||
+    effectiveTargetStudentId !== doc.target_student_user_id ||
     (offeringId || null) !== doc.offering_id ||
-    category !== doc.doc_category;
+    category !== ((doc.doc_category as DocCategory) || "general");
 
   async function save() {
     if (!title.trim()) {
       toast.error("العنوان مطلوب");
+      return;
+    }
+    if (audience === "program" && !programId) {
+      toast.error("يرجى اختيار البرنامج الأكاديمي المستهدف");
+      return;
+    }
+    if (audience === "level" && !levelId) {
+      toast.error("يرجى اختيار المستوى الأكاديمي المستهدف");
+      return;
+    }
+    if (audience === "student" && !targetStudentId) {
+      toast.error("يرجى اختيار الطالب المستهدف");
       return;
     }
     setSaving(true);
@@ -316,9 +360,9 @@ function DocRow({
         title: title.trim().slice(0, 200),
         description: desc.trim().slice(0, 1000) || null,
         audience_scope: audience,
-        program_id: audience === "program" ? programId || null : null,
-        level_id: audience === "level" ? levelId || null : null,
-        target_student_user_id: audience === "student" ? targetStudentId || null : null,
+        program_id: effectiveProgramId,
+        level_id: effectiveLevelId,
+        target_student_user_id: effectiveTargetStudentId,
         offering_id: offeringId || null,
         doc_category: category,
       });

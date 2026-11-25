@@ -84,6 +84,11 @@ export function Shell({
   const navigate = useNavigate();
   const qc = useQueryClient();
 
+  // Close mobile sidebar automatically on route changes
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [path]);
+
   // Close mobile sidebar on Escape key press
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -146,8 +151,8 @@ export function Shell({
           // Mobile styles: slide-in drawer
           "fixed inset-y-0 left-0 z-40 flex flex-col transition-all duration-300 ease-in-out",
           mobileOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full",
-          // Desktop styles: sticky full-height sidebar that scrolls with the page
-          "lg:sticky lg:top-0 lg:h-screen lg:self-start lg:translate-x-0 lg:shadow-none lg:shrink-0",
+          // Desktop styles: sticky full-height sidebar that remains pinned while content scrolls
+          "lg:sticky lg:top-0 lg:bottom-auto lg:h-screen lg:h-dvh lg:self-start lg:translate-x-0 lg:shadow-none lg:shrink-0",
           desktopOpen
             ? "lg:w-72 lg:min-w-72 lg:max-w-72 lg:opacity-100"
             : "lg:w-0 lg:min-w-0 lg:max-w-0 lg:opacity-0 lg:pointer-events-none lg:overflow-hidden",
@@ -210,7 +215,7 @@ export function Shell({
 
       {/* Main Content Area */}
       <div dir="rtl" className="flex min-w-0 flex-1 flex-col transition-all duration-300">
-        <header className="sticky top-0 z-20 flex h-16 items-center gap-3 border-b bg-card/95 px-4 backdrop-blur md:px-8">
+        <header className="sticky top-0 z-20 flex h-16 shrink-0 items-center gap-3 border-b bg-card/95 px-4 backdrop-blur md:px-8">
           {/* Hamburger Menu Button - accessible on both desktop and mobile */}
           <button
             type="button"
@@ -237,7 +242,7 @@ export function Shell({
         <main key={path} className="page-enter mx-auto w-full max-w-6xl flex-1 p-4 md:p-8">
           {children}
         </main>
-        <footer className="px-8 pb-6 text-center text-xs text-muted-foreground">
+        <footer className="mt-auto px-8 pb-6 text-center text-xs text-muted-foreground">
           <a
             href="https://www.facebook.com/HNU.Helwan"
             target="_blank"

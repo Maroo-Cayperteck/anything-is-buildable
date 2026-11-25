@@ -6,11 +6,17 @@ import {
   requireAdminServer,
   sanitizePdfFilename,
 } from "@/lib/auth.server";
-import { validatePdfFileClient, uploadAndPublishDocument } from "@/lib/documents-storage";
+import {
+  fetchAllDocuments,
+  uploadAndPublishDocument,
+  uploadPrivateStudentDocument,
+  validatePdfFileClient,
+} from "@/lib/documents-storage";
 
 const mockFrom = vi.fn();
 const mockGetUserById = vi.fn();
 const mockStorageUpload = vi.fn();
+const mockStorageUploadToSignedUrl = vi.fn();
 
 vi.mock("@/integrations/supabase/client.server", () => ({
   supabaseAdmin: {
@@ -28,21 +34,24 @@ vi.mock("@/integrations/supabase/client", () => ({
     storage: {
       from: () => ({
         upload: (...args: unknown[]) => mockStorageUpload(...args),
+        uploadToSignedUrl: (...args: unknown[]) => mockStorageUploadToSignedUrl(...args),
       }),
     },
-    from: () => ({
-      select: () => ({ order: async () => ({ data: [], error: null }) }),
-    }),
   },
 }));
 
 const mockPrepare = vi.fn();
 const mockCommitShared = vi.fn();
+const mockCommitPrivate = vi.fn();
+const mockCleanupOrphan = vi.fn();
+const mockAdminListDocs = vi.fn();
 
 vi.mock("@/lib/documents.functions", () => ({
+  adminListDocuments: (...args: unknown[]) => mockAdminListDocs(...args),
+  adminCleanupOrphanUpload: (...args: unknown[]) => mockCleanupOrphan(...args),
   adminPreparePdfUpload: (...args: unknown[]) => mockPrepare(...args),
   adminCommitSharedUpload: (...args: unknown[]) => mockCommitShared(...args),
-  adminCommitPrivateStudentUpload: vi.fn(),
+  adminCommitPrivateStudentUpload: (...args: unknown[]) => mockCommitPrivate(...args),
   adminCreateDocument: vi.fn(),
   adminDeleteDocument: vi.fn(),
   adminDeletePrivateStudentDocument: vi.fn(),
@@ -176,19 +185,99 @@ describe("Document upload failure handling (no fake success)", () => {
     expect(mockCommitShared).not.toHaveBeenCalled();
   });
 
-  it("throws when DB commit fails after storage upload", async () => {
+  it("throws when DB commit fails after storage upload and requests orphan cleanup", async () => {
     mockPrepare.mockResolvedValue({
       bucket: "student-documents",
       storagePath: "docs/11111111-1111-1111-1111-111111111111/test.pdf",
       safeFileName: "test.pdf",
-      previousPath: null,
+      previousPath: "docs/11111111-1111-1111-1111-111111111111/old.pdf",
+      uploadToken: "signed-upload-token",
     });
-    mockStorageUpload.mockResolvedValue({ error: null });
+    mockStorageUploadToSignedUrl.mockResolvedValue({ error: null });
     mockCommitShared.mockRejectedValue(new Error("DB write failed"));
+    mockCleanupOrphan.mockResolvedValue({ ok: true });
 
     const pdf = new File(["%PDF-1.4\n"], "test.pdf", { type: "application/pdf" });
     await expect(uploadAndPublishDocument("11111111-1111-1111-1111-111111111111", pdf)).rejects.toThrow(
       /DB write failed/,
     );
+    expect(mockStorageUploadToSignedUrl).toHaveBeenCalledWith(
+      "docs/11111111-1111-1111-1111-111111111111/test.pdf",
+      "signed-upload-token",
+      pdf,
+      { contentType: "application/pdf" },
+    );
+    expect(mockCleanupOrphan).toHaveBeenCalledWith({
+      data: {
+        kind: "shared",
+        storagePath: "docs/11111111-1111-1111-1111-111111111111/test.pdf",
+      },
+    });
+  });
+
+  it("completes shared replacement upload via signed token and returns DB record", async () => {
+    const savedDoc = {
+      id: "11111111-1111-1111-1111-111111111111",
+      file_path: "docs/11111111-1111-1111-1111-111111111111/new.pdf",
+      file_name: "new.pdf",
+      file_size: 9,
+    };
+    mockPrepare.mockResolvedValue({
+      bucket: "student-documents",
+      storagePath: savedDoc.file_path,
+      safeFileName: "new.pdf",
+      previousPath: "docs/11111111-1111-1111-1111-111111111111/old.pdf",
+      uploadToken: "signed-token-2",
+    });
+    mockStorageUploadToSignedUrl.mockResolvedValue({ error: null });
+    mockCommitShared.mockResolvedValue(savedDoc);
+
+    const pdf = new File(["%PDF-1.4\n"], "new.pdf", { type: "application/pdf" });
+    await expect(uploadAndPublishDocument(savedDoc.id, pdf)).resolves.toEqual(savedDoc);
+    expect(mockCommitShared).toHaveBeenCalledWith({
+      data: {
+        docId: savedDoc.id,
+        storagePath: savedDoc.file_path,
+        fileName: "new.pdf",
+        fileSize: pdf.size,
+        previousPath: "docs/11111111-1111-1111-1111-111111111111/old.pdf",
+      },
+    });
+    expect(mockCleanupOrphan).not.toHaveBeenCalled();
+  });
+
+  it("cleans up private orphan upload when DB commit fails", async () => {
+    mockPrepare.mockResolvedValue({
+      bucket: "private-student-documents",
+      storagePath: "students/22222222-2222-2222-2222-222222222222/private.pdf",
+      safeFileName: "private.pdf",
+      previousPath: null,
+      uploadToken: "priv-token",
+    });
+    mockStorageUploadToSignedUrl.mockResolvedValue({ error: null });
+    mockCommitPrivate.mockRejectedValue(new Error("Private DB insert failed"));
+    mockCleanupOrphan.mockResolvedValue({ ok: true });
+
+    const pdf = new File(["%PDF-1.4\n"], "private.pdf", { type: "application/pdf" });
+    await expect(
+      uploadPrivateStudentDocument({
+        studentUserId: "22222222-2222-2222-2222-222222222222",
+        title: "إفادة قيد",
+        file: pdf,
+      }),
+    ).rejects.toThrow(/Private DB insert failed/);
+    expect(mockCleanupOrphan).toHaveBeenCalledWith({
+      data: {
+        kind: "private",
+        storagePath: "students/22222222-2222-2222-2222-222222222222/private.pdf",
+      },
+    });
+  });
+
+  it("loads canonical admin document list through server function", async () => {
+    const docs = [{ id: "doc-1", title: "جدول" }];
+    mockAdminListDocs.mockResolvedValue(docs);
+    await expect(fetchAllDocuments()).resolves.toEqual(docs);
+    expect(mockAdminListDocs).toHaveBeenCalledTimes(1);
   });
 });

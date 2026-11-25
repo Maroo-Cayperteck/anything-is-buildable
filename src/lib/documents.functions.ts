@@ -23,6 +23,41 @@ const createDocumentSchema = z.object({
   is_available: z.boolean().optional().default(true),
 });
 
+function validateAudienceTargets(input: {
+  audience_scope: "all" | "program" | "level" | "student";
+  program_id?: string | null | undefined;
+  level_id?: string | null | undefined;
+  target_student_user_id?: string | null | undefined;
+}) {
+  if (input.audience_scope === "program" && !input.program_id) {
+    throw new Error("يرجى اختيار البرنامج الأكاديمي المستهدف");
+  }
+  if (input.audience_scope === "level" && !input.level_id) {
+    throw new Error("يرجى اختيار المستوى الأكاديمي المستهدف");
+  }
+  if (input.audience_scope === "student" && !input.target_student_user_id) {
+    throw new Error("يرجى اختيار الطالب المستهدف");
+  }
+}
+
+export const adminListDocuments = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { requireAdminServer } = await import("./auth.server");
+    await requireAdminServer(context.userId);
+
+    const { data, error } = await supabaseAdmin
+      .from("documents")
+      .select("*")
+      .order("sort_order", { ascending: true });
+
+    if (error) {
+      throw new Error(error.message || "تعذر جلب قائمة الملفات من الخادم");
+    }
+    return data ?? [];
+  });
+
 export const adminCreateDocument = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) => createDocumentSchema.parse(d))
@@ -30,6 +65,8 @@ export const adminCreateDocument = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { logAdminActivity, requireAdminServer } = await import("./auth.server");
     const admin = await requireAdminServer(context.userId);
+
+    validateAudienceTargets(data);
 
     const { data: existing } = await supabaseAdmin
       .from("documents")
@@ -100,10 +137,33 @@ export const adminUpdateDocument = createServerFn({ method: "POST" })
     if (fields.doc_category !== undefined) patch.doc_category = fields.doc_category;
     if (fields.offering_id !== undefined) patch.offering_id = fields.offering_id;
     if (fields.audience_scope !== undefined) {
+      const { data: existingDoc } = await supabaseAdmin
+        .from("documents")
+        .select("program_id, level_id, target_student_user_id")
+        .eq("id", id)
+        .maybeSingle();
+
+      const resolvedProgramId =
+        fields.program_id !== undefined ? fields.program_id : (existingDoc?.program_id ?? null);
+      const resolvedLevelId =
+        fields.level_id !== undefined ? fields.level_id : (existingDoc?.level_id ?? null);
+      const resolvedTargetStudentId =
+        fields.target_student_user_id !== undefined
+          ? fields.target_student_user_id
+          : (existingDoc?.target_student_user_id ?? null);
+
+      validateAudienceTargets({
+        audience_scope: fields.audience_scope,
+        program_id: resolvedProgramId,
+        level_id: resolvedLevelId,
+        target_student_user_id: resolvedTargetStudentId,
+      });
+
       patch.audience_scope = fields.audience_scope;
-      patch.program_id = fields.audience_scope === "program" ? (fields.program_id ?? null) : null;
-      patch.level_id = fields.audience_scope === "level" ? (fields.level_id ?? null) : null;
-      patch.target_student_user_id = fields.audience_scope === "student" ? (fields.target_student_user_id ?? null) : null;
+      patch.program_id = fields.audience_scope === "program" ? (resolvedProgramId ?? null) : null;
+      patch.level_id = fields.audience_scope === "level" ? (resolvedLevelId ?? null) : null;
+      patch.target_student_user_id =
+        fields.audience_scope === "student" ? (resolvedTargetStudentId ?? null) : null;
     }
 
     const { data: updated, error } = await supabaseAdmin
@@ -161,21 +221,46 @@ export const adminPreparePdfUpload = createServerFn({ method: "POST" })
       if (error || !existingDoc) throw new Error("لم يتم العثور على سجل المستند");
 
       const storagePath = `docs/${data.docId}/${crypto.randomUUID()}.pdf`;
+      const { data: signedUpload, error: signErr } = await supabaseAdmin.storage
+        .from(SHARED_BUCKET)
+        .createSignedUploadUrl(storagePath, { upsert: false });
+
+      if (signErr || !signedUpload?.token) {
+        throw new Error(signErr?.message || "تعذر تهيئة رابط الرفع في وحدة التخزين");
+      }
+
       return {
         bucket: SHARED_BUCKET,
         storagePath,
         safeFileName: safeName,
         previousPath: existingDoc.file_path,
+        uploadToken: signedUpload.token,
       };
     }
 
     if (!data.studentUserId) throw new Error("معرف الطالب مطلوب");
+    const { data: studentProfile, error: stuErr } = await supabaseAdmin
+      .from("student_profiles")
+      .select("user_id")
+      .eq("user_id", data.studentUserId)
+      .maybeSingle();
+    if (stuErr || !studentProfile) throw new Error("لم يتم العثور على ملف الطالب");
+
     const storagePath = `students/${data.studentUserId}/${crypto.randomUUID()}.pdf`;
+    const { data: signedUpload, error: signErr } = await supabaseAdmin.storage
+      .from(PRIVATE_BUCKET)
+      .createSignedUploadUrl(storagePath, { upsert: false });
+
+    if (signErr || !signedUpload?.token) {
+      throw new Error(signErr?.message || "تعذر تهيئة رابط رفع الملف الخاص في وحدة التخزين");
+    }
+
     return {
       bucket: PRIVATE_BUCKET,
       storagePath,
       safeFileName: safeName,
       previousPath: null,
+      uploadToken: signedUpload.token,
     };
   });
 
@@ -191,16 +276,70 @@ async function verifyUploadedPdfInStorage(bucket: string, storagePath: string) {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const { isPdfMagicHeader } = await import("./auth.server");
 
-  const { data: blob, error } = await supabaseAdmin.storage.from(bucket).download(storagePath);
-  if (error || !blob) {
-    throw new Error("تعذر التحقق من وجود الملف المرفوع في وحدة التخزين");
+  let head: Uint8Array | null = null;
+  const { data: signed } = await supabaseAdmin.storage.from(bucket).createSignedUrl(storagePath, 60);
+  if (signed?.signedUrl) {
+    try {
+      const resp = await fetch(signed.signedUrl, { headers: { Range: "bytes=0-7" } });
+      if (resp.ok || resp.status === 206) {
+        head = new Uint8Array(await resp.arrayBuffer());
+      }
+    } catch {
+      // Fall back to direct Storage download check
+    }
   }
-  const head = new Uint8Array(await blob.slice(0, 8).arrayBuffer());
+
+  if (!head) {
+    const { data: blob, error } = await supabaseAdmin.storage.from(bucket).download(storagePath);
+    if (error || !blob) {
+      throw new Error("تعذر التحقق من وجود الملف المرفوع في وحدة التخزين");
+    }
+    head = new Uint8Array(await blob.slice(0, 8).arrayBuffer());
+  }
+
   if (!isPdfMagicHeader(head)) {
     await supabaseAdmin.storage.from(bucket).remove([storagePath]).catch(() => {});
     throw new Error("الملف المرفوع ليس ملف PDF صالحًا");
   }
 }
+
+export const adminCleanupOrphanUpload = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        kind: z.enum(["shared", "private"]),
+        storagePath: z.string().trim().min(1).max(400),
+      })
+      .parse(d),
+  )
+  .handler(async ({ context, data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { requireAdminServer } = await import("./auth.server");
+    await requireAdminServer(context.userId);
+
+    if (data.kind === "shared") {
+      if (!data.storagePath.startsWith("docs/")) return { ok: false as const };
+      const { data: ref } = await supabaseAdmin
+        .from("documents")
+        .select("id")
+        .eq("file_path", data.storagePath)
+        .maybeSingle();
+      if (ref) return { ok: false as const };
+      await supabaseAdmin.storage.from(SHARED_BUCKET).remove([data.storagePath]).catch(() => {});
+      return { ok: true as const };
+    }
+
+    if (!data.storagePath.startsWith("students/")) return { ok: false as const };
+    const { data: ref } = await supabaseAdmin
+      .from("student_documents")
+      .select("id")
+      .eq("file_path", data.storagePath)
+      .maybeSingle();
+    if (ref) return { ok: false as const };
+    await supabaseAdmin.storage.from(PRIVATE_BUCKET).remove([data.storagePath]).catch(() => {});
+    return { ok: true as const };
+  });
 
 export const adminCommitSharedUpload = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -228,7 +367,7 @@ export const adminCommitSharedUpload = createServerFn({ method: "POST" })
       .select("*")
       .single();
 
-    if (dbErr || !updated) {
+    if (dbErr || !updated || updated.file_path !== data.storagePath) {
       await supabaseAdmin.storage.from(SHARED_BUCKET).remove([data.storagePath]).catch(() => {});
       throw new Error(dbErr?.message || "فشل حفظ بيانات الملف في قاعدة البيانات؛ تم التراجع عن الرفع");
     }
@@ -295,7 +434,7 @@ export const adminCommitPrivateStudentUpload = createServerFn({ method: "POST" }
       .select("*")
       .single();
 
-    if (dbErr || !created) {
+    if (dbErr || !created || created.file_path !== data.storagePath) {
       await supabaseAdmin.storage.from(PRIVATE_BUCKET).remove([data.storagePath]).catch(() => {});
       throw new Error(dbErr?.message || "تعذر حفظ الملف الخاص بالطالب في قاعدة البيانات");
     }

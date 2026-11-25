@@ -629,6 +629,19 @@ create policy "members read student docs" on storage.objects for select to authe
     )
   );
 
+drop policy if exists "admin insert student docs" on storage.objects;
+drop policy if exists "admin upload student docs" on storage.objects;
+create policy "admin upload student docs" on storage.objects for insert to authenticated
+  with check (bucket_id = 'student-documents' and public.has_role(auth.uid(), 'admin'));
+
+drop policy if exists "admin update student docs" on storage.objects;
+create policy "admin update student docs" on storage.objects for update to authenticated
+  using (bucket_id = 'student-documents' and public.has_role(auth.uid(), 'admin'));
+
+drop policy if exists "admin delete student docs" on storage.objects;
+create policy "admin delete student docs" on storage.objects for delete to authenticated
+  using (bucket_id = 'student-documents' and public.has_role(auth.uid(), 'admin'));
+
 drop policy if exists "read private student docs storage" on storage.objects;
 create policy "read private student docs storage" on storage.objects for select to authenticated
   using (
