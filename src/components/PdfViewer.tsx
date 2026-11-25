@@ -161,7 +161,7 @@ export default function PdfViewer({ url }: { url: string }) {
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
-        className="flex min-h-[60vh] max-h-[80vh] overflow-auto bg-secondary/70 p-4 touch-pan-x touch-pan-y"
+        className="flex min-h-[45vh] max-h-[65vh] overflow-auto bg-secondary/70 p-4 touch-pan-x touch-pan-y"
         style={{ scrollbarGutter: "stable" }}
       >
         <div className="m-auto flex flex-col items-center">

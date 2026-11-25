@@ -13,12 +13,22 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as AdminLoginRouteImport } from './routes/admin-login'
 import { Route as PortalRouteImport } from './routes/portal'
+import { Route as RegisterRouteImport } from './routes/register'
+import { Route as AdminIndexRouteImport } from './routes/admin.index'
+import { Route as AdminAcademicRouteImport } from './routes/admin.academic'
+import { Route as AdminDocumentsRouteImport } from './routes/admin.documents'
+import { Route as AdminEventsRouteImport } from './routes/admin.events'
+import { Route as AdminLogsRouteImport } from './routes/admin.logs'
+import { Route as AdminStudentsRouteImport } from './routes/admin.students'
 import { Route as PortalIndexRouteImport } from './routes/portal.index'
 import { Route as PortalCoursesRouteImport } from './routes/portal.courses'
 import { Route as PortalDocumentsRouteImport } from './routes/portal.documents'
+import { Route as PortalEventsRouteImport } from './routes/portal.events'
 import { Route as PortalGradesRouteImport } from './routes/portal.grades'
 import { Route as PortalInfoRouteImport } from './routes/portal.info'
 import { Route as PortalRegistrationRouteImport } from './routes/portal.registration'
+import { Route as AdminStudentsIndexRouteImport } from './routes/admin.students.index'
+import { Route as AdminStudentsUserIdRouteImport } from './routes/admin.students.$userId'
 import { Route as PortalViewerDocIdRouteImport } from './routes/portal.viewer.$docId'
 
 const IndexRoute = IndexRouteImport.update({
@@ -41,6 +51,41 @@ const PortalRoute = PortalRouteImport.update({
   path: '/portal',
   getParentRoute: () => rootRouteImport,
 } as any)
+const RegisterRoute = RegisterRouteImport.update({
+  id: '/register',
+  path: '/register',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminIndexRoute = AdminIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminAcademicRoute = AdminAcademicRouteImport.update({
+  id: '/academic',
+  path: '/academic',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminDocumentsRoute = AdminDocumentsRouteImport.update({
+  id: '/documents',
+  path: '/documents',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminEventsRoute = AdminEventsRouteImport.update({
+  id: '/events',
+  path: '/events',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminLogsRoute = AdminLogsRouteImport.update({
+  id: '/logs',
+  path: '/logs',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminStudentsRoute = AdminStudentsRouteImport.update({
+  id: '/students',
+  path: '/students',
+  getParentRoute: () => AdminRoute,
+} as any)
 const PortalIndexRoute = PortalIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -54,6 +99,11 @@ const PortalCoursesRoute = PortalCoursesRouteImport.update({
 const PortalDocumentsRoute = PortalDocumentsRouteImport.update({
   id: '/documents',
   path: '/documents',
+  getParentRoute: () => PortalRoute,
+} as any)
+const PortalEventsRoute = PortalEventsRouteImport.update({
+  id: '/events',
+  path: '/events',
   getParentRoute: () => PortalRoute,
 } as any)
 const PortalGradesRoute = PortalGradesRouteImport.update({
@@ -71,6 +121,16 @@ const PortalRegistrationRoute = PortalRegistrationRouteImport.update({
   path: '/registration',
   getParentRoute: () => PortalRoute,
 } as any)
+const AdminStudentsIndexRoute = AdminStudentsIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AdminStudentsRoute,
+} as any)
+const AdminStudentsUserIdRoute = AdminStudentsUserIdRouteImport.update({
+  id: '/$userId',
+  path: '/$userId',
+  getParentRoute: () => AdminStudentsRoute,
+} as any)
 const PortalViewerDocIdRoute = PortalViewerDocIdRouteImport.update({
   id: '/viewer/$docId',
   path: '/viewer/$docId',
@@ -79,42 +139,70 @@ const PortalViewerDocIdRoute = PortalViewerDocIdRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/admin': typeof AdminRoute
+  '/admin': typeof AdminRouteWithChildren
   '/admin-login': typeof AdminLoginRoute
   '/portal': typeof PortalRouteWithChildren
+  '/register': typeof RegisterRoute
+  '/admin/academic': typeof AdminAcademicRoute
+  '/admin/documents': typeof AdminDocumentsRoute
+  '/admin/events': typeof AdminEventsRoute
+  '/admin/logs': typeof AdminLogsRoute
+  '/admin/students': typeof AdminStudentsRouteWithChildren
   '/portal/courses': typeof PortalCoursesRoute
   '/portal/documents': typeof PortalDocumentsRoute
+  '/portal/events': typeof PortalEventsRoute
   '/portal/grades': typeof PortalGradesRoute
   '/portal/info': typeof PortalInfoRoute
   '/portal/registration': typeof PortalRegistrationRoute
+  '/admin/': typeof AdminIndexRoute
   '/portal/': typeof PortalIndexRoute
+  '/admin/students/$userId': typeof AdminStudentsUserIdRoute
   '/portal/viewer/$docId': typeof PortalViewerDocIdRoute
+  '/admin/students/': typeof AdminStudentsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/admin': typeof AdminRoute
   '/admin-login': typeof AdminLoginRoute
+  '/register': typeof RegisterRoute
+  '/admin/academic': typeof AdminAcademicRoute
+  '/admin/documents': typeof AdminDocumentsRoute
+  '/admin/events': typeof AdminEventsRoute
+  '/admin/logs': typeof AdminLogsRoute
   '/portal/courses': typeof PortalCoursesRoute
   '/portal/documents': typeof PortalDocumentsRoute
+  '/portal/events': typeof PortalEventsRoute
   '/portal/grades': typeof PortalGradesRoute
   '/portal/info': typeof PortalInfoRoute
   '/portal/registration': typeof PortalRegistrationRoute
+  '/admin': typeof AdminIndexRoute
   '/portal': typeof PortalIndexRoute
+  '/admin/students/$userId': typeof AdminStudentsUserIdRoute
   '/portal/viewer/$docId': typeof PortalViewerDocIdRoute
+  '/admin/students': typeof AdminStudentsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/admin': typeof AdminRoute
+  '/admin': typeof AdminRouteWithChildren
   '/admin-login': typeof AdminLoginRoute
   '/portal': typeof PortalRouteWithChildren
+  '/register': typeof RegisterRoute
+  '/admin/academic': typeof AdminAcademicRoute
+  '/admin/documents': typeof AdminDocumentsRoute
+  '/admin/events': typeof AdminEventsRoute
+  '/admin/logs': typeof AdminLogsRoute
+  '/admin/students': typeof AdminStudentsRouteWithChildren
   '/portal/courses': typeof PortalCoursesRoute
   '/portal/documents': typeof PortalDocumentsRoute
+  '/portal/events': typeof PortalEventsRoute
   '/portal/grades': typeof PortalGradesRoute
   '/portal/info': typeof PortalInfoRoute
   '/portal/registration': typeof PortalRegistrationRoute
+  '/admin/': typeof AdminIndexRoute
   '/portal/': typeof PortalIndexRoute
+  '/admin/students/$userId': typeof AdminStudentsUserIdRoute
   '/portal/viewer/$docId': typeof PortalViewerDocIdRoute
+  '/admin/students/': typeof AdminStudentsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -123,45 +211,74 @@ export interface FileRouteTypes {
     | '/admin'
     | '/admin-login'
     | '/portal'
+    | '/register'
+    | '/admin/academic'
+    | '/admin/documents'
+    | '/admin/events'
+    | '/admin/logs'
+    | '/admin/students'
     | '/portal/courses'
     | '/portal/documents'
+    | '/portal/events'
     | '/portal/grades'
     | '/portal/info'
     | '/portal/registration'
+    | '/admin/'
     | '/portal/'
+    | '/admin/students/$userId'
     | '/portal/viewer/$docId'
+    | '/admin/students/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
-    | '/admin'
     | '/admin-login'
+    | '/register'
+    | '/admin/academic'
+    | '/admin/documents'
+    | '/admin/events'
+    | '/admin/logs'
     | '/portal/courses'
     | '/portal/documents'
+    | '/portal/events'
     | '/portal/grades'
     | '/portal/info'
     | '/portal/registration'
+    | '/admin'
     | '/portal'
+    | '/admin/students/$userId'
     | '/portal/viewer/$docId'
+    | '/admin/students'
   id:
     | '__root__'
     | '/'
     | '/admin'
     | '/admin-login'
     | '/portal'
+    | '/register'
+    | '/admin/academic'
+    | '/admin/documents'
+    | '/admin/events'
+    | '/admin/logs'
+    | '/admin/students'
     | '/portal/courses'
     | '/portal/documents'
+    | '/portal/events'
     | '/portal/grades'
     | '/portal/info'
     | '/portal/registration'
+    | '/admin/'
     | '/portal/'
+    | '/admin/students/$userId'
     | '/portal/viewer/$docId'
+    | '/admin/students/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  AdminRoute: typeof AdminRoute
+  AdminRoute: typeof AdminRouteWithChildren
   AdminLoginRoute: typeof AdminLoginRoute
   PortalRoute: typeof PortalRouteWithChildren
+  RegisterRoute: typeof RegisterRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -194,6 +311,55 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PortalRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/register': {
+      id: '/register'
+      path: '/register'
+      fullPath: '/register'
+      preLoaderRoute: typeof RegisterRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin/': {
+      id: '/admin/'
+      path: '/'
+      fullPath: '/admin/'
+      preLoaderRoute: typeof AdminIndexRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/academic': {
+      id: '/admin/academic'
+      path: '/academic'
+      fullPath: '/admin/academic'
+      preLoaderRoute: typeof AdminAcademicRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/documents': {
+      id: '/admin/documents'
+      path: '/documents'
+      fullPath: '/admin/documents'
+      preLoaderRoute: typeof AdminDocumentsRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/events': {
+      id: '/admin/events'
+      path: '/events'
+      fullPath: '/admin/events'
+      preLoaderRoute: typeof AdminEventsRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/logs': {
+      id: '/admin/logs'
+      path: '/logs'
+      fullPath: '/admin/logs'
+      preLoaderRoute: typeof AdminLogsRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/students': {
+      id: '/admin/students'
+      path: '/students'
+      fullPath: '/admin/students'
+      preLoaderRoute: typeof AdminStudentsRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/portal/': {
       id: '/portal/'
       path: '/'
@@ -213,6 +379,13 @@ declare module '@tanstack/react-router' {
       path: '/documents'
       fullPath: '/portal/documents'
       preLoaderRoute: typeof PortalDocumentsRouteImport
+      parentRoute: typeof PortalRoute
+    }
+    '/portal/events': {
+      id: '/portal/events'
+      path: '/events'
+      fullPath: '/portal/events'
+      preLoaderRoute: typeof PortalEventsRouteImport
       parentRoute: typeof PortalRoute
     }
     '/portal/grades': {
@@ -236,6 +409,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PortalRegistrationRouteImport
       parentRoute: typeof PortalRoute
     }
+    '/admin/students/': {
+      id: '/admin/students/'
+      path: '/'
+      fullPath: '/admin/students/'
+      preLoaderRoute: typeof AdminStudentsIndexRouteImport
+      parentRoute: typeof AdminStudentsRoute
+    }
+    '/admin/students/$userId': {
+      id: '/admin/students/$userId'
+      path: '/$userId'
+      fullPath: '/admin/students/$userId'
+      preLoaderRoute: typeof AdminStudentsUserIdRouteImport
+      parentRoute: typeof AdminStudentsRoute
+    }
     '/portal/viewer/$docId': {
       id: '/portal/viewer/$docId'
       path: '/viewer/$docId'
@@ -246,9 +433,44 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface AdminStudentsRouteChildren {
+  AdminStudentsUserIdRoute: typeof AdminStudentsUserIdRoute
+  AdminStudentsIndexRoute: typeof AdminStudentsIndexRoute
+}
+
+const AdminStudentsRouteChildren: AdminStudentsRouteChildren = {
+  AdminStudentsUserIdRoute: AdminStudentsUserIdRoute,
+  AdminStudentsIndexRoute: AdminStudentsIndexRoute,
+}
+
+const AdminStudentsRouteWithChildren = AdminStudentsRoute._addFileChildren(
+  AdminStudentsRouteChildren,
+)
+
+interface AdminRouteChildren {
+  AdminAcademicRoute: typeof AdminAcademicRoute
+  AdminDocumentsRoute: typeof AdminDocumentsRoute
+  AdminEventsRoute: typeof AdminEventsRoute
+  AdminLogsRoute: typeof AdminLogsRoute
+  AdminStudentsRoute: typeof AdminStudentsRouteWithChildren
+  AdminIndexRoute: typeof AdminIndexRoute
+}
+
+const AdminRouteChildren: AdminRouteChildren = {
+  AdminAcademicRoute: AdminAcademicRoute,
+  AdminDocumentsRoute: AdminDocumentsRoute,
+  AdminEventsRoute: AdminEventsRoute,
+  AdminLogsRoute: AdminLogsRoute,
+  AdminStudentsRoute: AdminStudentsRouteWithChildren,
+  AdminIndexRoute: AdminIndexRoute,
+}
+
+const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
+
 interface PortalRouteChildren {
   PortalCoursesRoute: typeof PortalCoursesRoute
   PortalDocumentsRoute: typeof PortalDocumentsRoute
+  PortalEventsRoute: typeof PortalEventsRoute
   PortalGradesRoute: typeof PortalGradesRoute
   PortalInfoRoute: typeof PortalInfoRoute
   PortalRegistrationRoute: typeof PortalRegistrationRoute
@@ -259,6 +481,7 @@ interface PortalRouteChildren {
 const PortalRouteChildren: PortalRouteChildren = {
   PortalCoursesRoute: PortalCoursesRoute,
   PortalDocumentsRoute: PortalDocumentsRoute,
+  PortalEventsRoute: PortalEventsRoute,
   PortalGradesRoute: PortalGradesRoute,
   PortalInfoRoute: PortalInfoRoute,
   PortalRegistrationRoute: PortalRegistrationRoute,
@@ -271,9 +494,10 @@ const PortalRouteWithChildren =
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  AdminRoute: AdminRoute,
+  AdminRoute: AdminRouteWithChildren,
   AdminLoginRoute: AdminLoginRoute,
   PortalRoute: PortalRouteWithChildren,
+  RegisterRoute: RegisterRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -2,38 +2,75 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { Award, ChevronDown, Clock, GraduationCap, Info, TrendingUp } from "lucide-react";
 import { GradePill, StatCard } from "@/components/portal/Shell";
-import { useProfile } from "@/lib/use-profile";
-import { GPA_SCALE, TRANSCRIPT } from "@/lib/portal-data";
+import { GPA_SCALE } from "@/lib/portal-data";
+import { usePortalSnapshot } from "@/lib/use-profile";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/portal/grades")({
   head: () => ({
     meta: [
       { title: "النتائج والمعدل التراكمي — بوابة الطالب" },
-      { name: "description", content: "السجل الأكاديمي ونتائج الفصول والمعدل التراكمي." },
-      { property: "og:title", content: "النتائج والمعدل التراكمي — بوابة الطالب" },
-      { property: "og:description", content: "السجل الأكاديمي للطالب." },
+      { name: "description", content: "السجل الأكاديمي ونتائج الفصول المعتمدة والمعدل التراكمي." },
     ],
   }),
   component: Grades,
 });
 
 function Grades() {
-  const p = useProfile();
+  const { data: snap } = usePortalSnapshot();
+  const p = snap!.profile;
+  const grades = snap!.grades;
+  const summaries = snap!.gradeSummaries;
   const [scaleOpen, setScaleOpen] = useState(false);
+
+  const groupedBySemester = new Map<
+    string,
+    {
+      semesterId: string;
+      semesterName: string;
+      yearName: string;
+      rows: typeof grades;
+      semesterGpa: number | null;
+    }
+  >();
+
+  for (const g of grades) {
+    const existing = groupedBySemester.get(g.semester_id) ?? {
+      semesterId: g.semester_id,
+      semesterName: g.semesterName,
+      yearName: g.academicYearName,
+      rows: [],
+      semesterGpa: summaries.find((s) => s.semester_id === g.semester_id)?.semester_gpa ?? null,
+    };
+    existing.rows.push(g);
+    groupedBySemester.set(g.semester_id, existing);
+  }
+
+  const termSections = Array.from(groupedBySemester.values());
 
   return (
     <div className="space-y-6">
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard icon={Award} label="المعدل التراكمي" value={<span className="text-danger">{Number(p.cgpa).toFixed(2)}</span>} sub="/ 4.00" tone="danger" />
-        <StatCard icon={GraduationCap} label="التقدير" value="D+" tone="gold" />
-        <StatCard icon={Clock} label="الساعات المكتسبة" value={p.earned_hours} sub="ساعة" />
-        <StatCard icon={TrendingUp} label="المستوى" value="2" tone="success" />
+        <StatCard
+          icon={Award}
+          label="المعدل التراكمي"
+          value={p.cgpa != null ? <span className="text-danger">{Number(p.cgpa).toFixed(2)}</span> : "—"}
+          sub={p.cgpa != null ? "/ 4.00" : undefined}
+          tone="danger"
+        />
+        <StatCard icon={GraduationCap} label="المستوى الأكاديمي" value={p.resolvedLevelName || "—"} tone="gold" />
+        <StatCard
+          icon={Clock}
+          label="الساعات المكتسبة"
+          value={p.earned_hours ?? "—"}
+          sub={p.earned_hours != null ? "ساعة" : undefined}
+        />
+        <StatCard icon={TrendingUp} label="الحالة الأكاديمية" value={p.academic_status || "مقيد"} tone="success" />
       </div>
 
       <section className="overflow-hidden rounded-xl border bg-card shadow-card">
         <button onClick={() => setScaleOpen((o) => !o)} className="flex w-full items-center gap-3 px-6 py-4 text-sm font-semibold">
-          <Info className="h-4 w-4 text-primary" /> سلم التقديرات
+          <Info className="h-4 w-4 text-primary" /> سلم التقديرات المرجعي
           <ChevronDown className={cn("mr-auto h-4 w-4 transition-transform", scaleOpen && "rotate-180")} />
         </button>
         {scaleOpen && (
@@ -42,30 +79,33 @@ function Grades() {
               <div key={g} className="rounded-lg border p-3 text-center">
                 <GradePill grade={g} />
                 <div className="mt-2 font-mono text-sm font-bold">{pts}</div>
-                <div className="text-xs text-muted-foreground" dir="ltr">{range}</div>
+                <div className="text-xs text-muted-foreground" dir="ltr">
+                  {range}
+                </div>
               </div>
             ))}
           </div>
         )}
       </section>
 
-      {TRANSCRIPT.map((t) => (
-        <section key={t.season + t.year} className="overflow-hidden rounded-xl border bg-card shadow-card">
-          <div className="flex flex-wrap items-center gap-3 border-b px-6 py-4">
-            <h3 className="text-lg font-bold">الفصل {t.seasonAr}</h3>
-            <span className="rounded-full bg-secondary px-3 py-0.5 text-sm">{t.year}</span>
-            <span className={cn("rounded-full px-3 py-0.5 text-sm font-medium", t.posted ? "bg-success-soft text-success" : "bg-warning-soft text-warning")}>
-              {t.posted ? "معلنة" : "لم تُعلن بعد"}
-            </span>
-            {t.gpa != null && (
-              <span className="mr-auto rounded-full bg-muted px-4 py-1 text-sm text-muted-foreground">
-                المعدل الفصلي <span className="font-mono font-bold text-danger">{t.gpa.toFixed(2)}</span>
-              </span>
-            )}
-          </div>
-          {t.courses.length === 0 ? (
-            <p className="p-8 text-center text-sm text-muted-foreground">لا توجد نتائج متاحة لهذا الفصل.</p>
-          ) : (
+      {termSections.length === 0 ? (
+        <section className="rounded-xl border bg-card p-10 text-center shadow-card">
+          <p className="text-sm font-medium text-foreground">لا توجد نتائج معتمدة منشورة حتى الآن.</p>
+          <p className="mt-1 text-xs text-muted-foreground">ستظهر النتائج فور اعتمادها ونشرها من إدارة شؤون الطلاب.</p>
+        </section>
+      ) : (
+        termSections.map((t) => (
+          <section key={t.semesterId} className="overflow-hidden rounded-xl border bg-card shadow-card">
+            <div className="flex flex-wrap items-center gap-3 border-b px-6 py-4">
+              <h3 className="text-lg font-bold">{t.semesterName}</h3>
+              {t.yearName && <span className="rounded-full bg-secondary px-3 py-0.5 text-sm">{t.yearName}</span>}
+              <span className="rounded-full bg-success-soft px-3 py-0.5 text-sm font-medium text-success">معلنة</span>
+              {t.semesterGpa != null && (
+                <span className="mr-auto rounded-full bg-muted px-4 py-1 text-sm text-muted-foreground">
+                  المعدل الفصلي <span className="font-mono font-bold text-danger">{Number(t.semesterGpa).toFixed(2)}</span>
+                </span>
+              )}
+            </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="bg-muted/60">
@@ -79,38 +119,30 @@ function Grades() {
                   </tr>
                 </thead>
                 <tbody>
-                  {t.courses.map((c) => (
-                    <tr key={c.code} className="border-t text-center">
+                  {t.rows.map((c) => (
+                    <tr key={c.id} className="border-t text-center">
                       <td className="p-4 text-right" dir="ltr" style={{ textAlign: "right" }}>
-                        <div className="font-medium">{c.code}-{c.name}</div>
-                        <div className="font-mono text-xs text-muted-foreground">{c.code}</div>
+                        <div className="font-medium">
+                          {c.courseCode} - {c.courseName}
+                        </div>
                       </td>
-                      <td className="p-4">{c.hours}</td>
-                      <td className="p-4 font-mono">{c.marks.toFixed(1)}</td>
-                      <td className="p-4"><GradePill grade={c.grade} /></td>
-                      <td className="p-4 font-mono">{c.points.toFixed(2)}</td>
-                      <td className="p-4"><span className="rounded-full bg-success-soft px-2.5 py-0.5 text-xs text-success">ناجح</span></td>
+                      <td className="p-4">{c.creditHours}</td>
+                      <td className="p-4 font-mono">{c.marks != null ? Number(c.marks).toFixed(1) : "—"}</td>
+                      <td className="p-4">{c.grade_letter ? <GradePill grade={c.grade_letter} /> : "—"}</td>
+                      <td className="p-4 font-mono">{c.grade_points != null ? Number(c.grade_points).toFixed(2) : "—"}</td>
+                      <td className="p-4">
+                        <span className="rounded-full bg-success-soft px-2.5 py-0.5 text-xs text-success">
+                          {c.status_label}
+                        </span>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-          )}
-          {t.cumulative && (
-            <div className="flex flex-wrap gap-8 border-t bg-muted/40 px-6 py-4 text-sm">
-              <div>
-                <div className="label-caps">الفصل</div>
-                المعدل: <b>{t.gpa?.toFixed(2)}</b> · الساعات: <b>{t.courses.reduce((a, c) => a + c.hours, 0)}</b>
-              </div>
-              <div>
-                <div className="label-caps">التراكمي</div>
-                المعدل التراكمي: <b className="text-danger">{t.cumulative.cgpa}</b> · الساعات: <b>{t.cumulative.hours}</b> · المستوى: <b>{t.cumulative.level}</b>
-              </div>
-            </div>
-          )}
-        </section>
-      ))}
-      <p className="text-center text-xs text-muted-foreground">تُعرض المقررات الظاهرة في الصور المرجعية فقط؛ قد لا يشمل السجل جميع المقررات السابقة.</p>
+          </section>
+        ))
+      )}
     </div>
   );
 }

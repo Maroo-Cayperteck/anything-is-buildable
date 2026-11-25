@@ -3,13 +3,18 @@ import { useEffect, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   BookOpen,
+  CalendarDays,
   ClipboardList,
   FileDown,
+  FolderCog,
   GraduationCap,
+  History,
   LayoutDashboard,
   LogOut,
+  Megaphone,
   Menu,
   UserRound,
+  Users,
   BarChart3,
   X,
   Loader2,
@@ -27,6 +32,16 @@ export const STUDENT_NAV: NavItem[] = [
   { to: "/portal/courses", label: "المقررات الدراسية", icon: BookOpen },
   { to: "/portal/grades", label: "النتائج والمعدل التراكمي", icon: BarChart3 },
   { to: "/portal/documents", label: "تحميل ملفات الطالب", icon: FileDown },
+  { to: "/portal/events", label: "الإعلانات والفعاليات", icon: CalendarDays },
+];
+
+export const ADMIN_NAV: NavItem[] = [
+  { to: "/admin", label: "نظرة عامة", icon: LayoutDashboard },
+  { to: "/admin/students", label: "الطلاب والتسجيل", icon: Users },
+  { to: "/admin/academic", label: "الشؤون الأكاديمية", icon: BookOpen },
+  { to: "/admin/documents", label: "إدارة ملفات الطلاب", icon: FolderCog },
+  { to: "/admin/events", label: "الإعلانات والفعاليات", icon: Megaphone },
+  { to: "/admin/logs", label: "سجل النشاط", icon: History },
 ];
 
 export function BrandMark({ className }: { className?: string }) {
@@ -68,6 +83,11 @@ export function Shell({
   const [desktopOpen, setDesktopOpen] = useState(true);
   const navigate = useNavigate();
   const qc = useQueryClient();
+
+  // Close mobile sidebar automatically on route changes
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [path]);
 
   // Close mobile sidebar on Escape key press
   useEffect(() => {
@@ -112,7 +132,7 @@ export function Shell({
   const initial = userName.trim().split(/\s+/)[0]?.[0] || userName.trim()[0] || "ع";
 
   return (
-    <div dir="ltr" className="flex min-h-screen w-full overflow-x-hidden">
+    <div dir="ltr" className="flex min-h-screen w-full overflow-x-clip">
       {/* Mobile semi-transparent backdrop overlay */}
       {mobileOpen && (
         <div
@@ -131,8 +151,8 @@ export function Shell({
           // Mobile styles: slide-in drawer
           "fixed inset-y-0 left-0 z-40 flex flex-col transition-all duration-300 ease-in-out",
           mobileOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full",
-          // Desktop styles: collapsible sidebar in layout flow
-          "lg:sticky lg:top-0 lg:h-screen lg:translate-x-0 lg:shadow-none lg:shrink-0",
+          // Desktop styles: sticky full-height sidebar that remains pinned while content scrolls
+          "lg:sticky lg:top-0 lg:bottom-auto lg:h-screen lg:h-dvh lg:self-start lg:translate-x-0 lg:shadow-none lg:shrink-0",
           desktopOpen
             ? "lg:w-72 lg:min-w-72 lg:max-w-72 lg:opacity-100"
             : "lg:w-0 lg:min-w-0 lg:max-w-0 lg:opacity-0 lg:pointer-events-none lg:overflow-hidden",
@@ -195,7 +215,7 @@ export function Shell({
 
       {/* Main Content Area */}
       <div dir="rtl" className="flex min-w-0 flex-1 flex-col transition-all duration-300">
-        <header className="sticky top-0 z-20 flex h-16 items-center gap-3 border-b bg-card/95 px-4 backdrop-blur md:px-8">
+        <header className="sticky top-0 z-20 flex h-16 shrink-0 items-center gap-3 border-b bg-card/95 px-4 backdrop-blur md:px-8">
           {/* Hamburger Menu Button - accessible on both desktop and mobile */}
           <button
             type="button"
@@ -222,7 +242,7 @@ export function Shell({
         <main key={path} className="page-enter mx-auto w-full max-w-6xl flex-1 p-4 md:p-8">
           {children}
         </main>
-        <footer className="px-8 pb-6 text-center text-xs text-muted-foreground">
+        <footer className="mt-auto px-8 pb-6 text-center text-xs text-muted-foreground">
           <a
             href="https://www.facebook.com/HNU.Helwan"
             target="_blank"
@@ -287,7 +307,19 @@ export function FullLoader() {
   );
 }
 
-export function StatCard({ icon: Icon, label, value, sub, tone = "info" }: { icon: LucideIcon; label: string; value: React.ReactNode; sub?: string; tone?: "info" | "gold" | "success" | "danger" }) {
+export function StatCard({
+  icon: Icon,
+  label,
+  value,
+  sub,
+  tone = "info",
+}: {
+  icon: LucideIcon;
+  label: string;
+  value: React.ReactNode;
+  sub?: string | undefined;
+  tone?: "info" | "gold" | "success" | "danger";
+}) {
   const toneCls = { info: "bg-info-soft text-primary", gold: "bg-gold-soft text-warning", success: "bg-success-soft text-success", danger: "bg-destructive/10 text-danger" }[tone];
   return (
     <div className="flex items-center gap-4 rounded-xl border bg-card p-5 shadow-card transition-transform hover:-translate-y-0.5">

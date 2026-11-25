@@ -1,136 +1,198 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
-import { usernameToEmail } from "./auth-helpers";
+import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
 /**
- * Server-side credential verification.
- * All credential hashes, profile records, and session signing live in accounts.server.ts
- * so they never enter the browser bundle.
+ * Returns authoritative server-verified roles and student onboarding/account status
+ * for the currently authenticated Supabase user.
  */
-export const verifyDemoCredentials = createServerFn({ method: "POST" })
-  .inputValidator((d: unknown) =>
-    z.object({ username: z.string().trim().min(1).max(64), password: z.string().min(1).max(128) }).parse(d),
-  )
-  .handler(async ({ data }) => {
-    const { DEMO_ACCOUNTS, STUDENT_PROFILE, sha256Hex, setServerSessionCookie } = await import("./accounts.server");
-    const account =
-      DEMO_ACCOUNTS[await sha256Hex(`${data.username}:${data.password}`)] ??
-      DEMO_ACCOUNTS[await sha256Hex(`${data.username.toLowerCase()}:${data.password}`)] ??
-      DEMO_ACCOUNTS[await sha256Hex(`${data.username.toLowerCase()}:${data.password.toLowerCase()}`)];
-    if (!account) return { ok: false as const };
+export const getAuthAccountStatus = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { getUserRolesServer } = await import("./auth.server");
+    let client = context.supabase;
+    if (process.env["SUPABASE_SERVICE_ROLE_KEY"]) {
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      client = supabaseAdmin;
+    }
 
-    await setServerSessionCookie(account.role, account.username);
+    const roles = await getUserRolesServer(context.userId, client);
+    const [{ data: profile, error: profileErr }, { data: regRequest }] = await Promise.all([
+      client
+        .from("student_profiles")
+        .select("user_id, account_status, full_name_ar, student_code")
+        .eq("user_id", context.userId)
+        .maybeSingle(),
+      client
+        .from("registration_requests")
+        .select("status, rejection_reason")
+        .eq("auth_user_id", context.userId)
+        .maybeSingle(),
+    ]);
 
-    // If Supabase admin credentials are available (production/Lovable Cloud),
-    // also provision the user and generate a magiclink OTP token for a real JWT session.
-    if (process.env["SUPABASE_URL"] && process.env["SUPABASE_SERVICE_ROLE_KEY"]) {
-      try {
-        const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-        const email = usernameToEmail(account.username);
-
-        const { data: list } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 200 });
-        let user = list?.users.find((u) => u.email === email);
-        if (!user) {
-          const { data: created, error } = await supabaseAdmin.auth.admin.createUser({
-            email,
-            password: data.password,
-            email_confirm: true,
-          });
-          if (!error && created.user) {
-            user = created.user;
-          }
+    let accountStatus = profile?.account_status ?? null;
+    if (profileErr) {
+      const msg = (profileErr.message ?? "").toLowerCase();
+      const missingAccountStatusCol =
+        profileErr.code === "42703" ||
+        profileErr.code === "PGRST204" ||
+        (msg.includes("account_status") && msg.includes("column"));
+      if (missingAccountStatusCol) {
+        const { data: legacyProfile } = await client
+          .from("student_profiles")
+          .select("user_id")
+          .eq("user_id", context.userId)
+          .maybeSingle();
+        if (legacyProfile || roles.includes("student")) {
+          accountStatus = "active";
         }
-        if (user) {
-          await supabaseAdmin.from("user_roles").upsert({ user_id: user.id, role: account.role }, { onConflict: "user_id,role" });
-          if (account.role === "student") {
-            await supabaseAdmin.from("student_profiles").upsert({ ...STUDENT_PROFILE, user_id: user.id }, { onConflict: "user_id" });
-          }
-          const { data: linkData, error: linkErr } = await supabaseAdmin.auth.admin.generateLink({
-            type: "magiclink",
-            email,
-          });
-          const tokenHash = linkData?.properties?.hashed_token;
-          if (!linkErr && tokenHash) {
-            return {
-              ok: true as const,
-              role: account.role,
-              username: account.username,
-              mode: "otp" as const,
-              tokenHash,
-            };
-          }
-        }
-      } catch {
-        // Fall through to HttpOnly cookie session
       }
     }
 
     return {
-      ok: true as const,
-      role: account.role,
-      username: account.username,
-      mode: "cookie" as const,
+      userId: context.userId,
+      roles,
+      accountStatus,
+      registrationStatus: regRequest?.status ?? null,
+      rejectionReason: regRequest?.rejection_reason ?? null,
     };
   });
 
-/** @deprecated Use verifyDemoCredentials instead */
-export const ensureDemoAccount = verifyDemoCredentials;
-
-/** Returns the verified HttpOnly server session, or null if not authenticated. */
-export const getServerSession = createServerFn({ method: "GET" }).handler(async () => {
-  const { readServerSessionCookie } = await import("./accounts.server");
-  return readServerSessionCookie();
-});
-
-/** Clears the HttpOnly server session cookie on sign out. */
-export const serverSignOut = createServerFn({ method: "POST" }).handler(async () => {
-  const { clearServerSessionCookie } = await import("./accounts.server");
-  clearServerSessionCookie();
-  return { ok: true as const };
+const registrationSchema = z.object({
+  studentCode: z.string().trim().min(2, "يرجى إدخال الرقم الجامعي").max(40),
+  email: z.string().trim().email("يرجى إدخال بريد إلكتروني صحيح").max(160),
+  fullNameAr: z.string().trim().min(3, "يرجى إدخال الاسم الكامل بالعربية").max(160),
+  fullNameEn: z.string().trim().max(160).optional(),
+  phone: z
+    .string()
+    .trim()
+    .regex(/^[0-9+\-\s]{7,20}$/, "رقم الهاتف غير صالح")
+    .optional()
+    .or(z.literal("")),
+  gender: z.enum(["ذكر", "أنثى"]).optional(),
 });
 
 /**
- * Returns the student profile ONLY for an authenticated student session
- * (verified via HttpOnly server cookie or Supabase Bearer token).
+ * Creates a pending student registration request after validating against the
+ * admin-managed student_roster. Caller must be authenticated via Supabase Auth.
  */
-export const getStudentProfile = createServerFn({ method: "GET" }).handler(async () => {
-  const { readServerSessionCookie, STUDENT_PROFILE } = await import("./accounts.server");
-  const cookieSession = await readServerSessionCookie();
-  if (cookieSession && cookieSession.role === "student") {
-    return STUDENT_PROFILE;
-  }
+export const submitRegistrationRequest = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => registrationSchema.parse(d))
+  .handler(async ({ context, data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
-  // Also allow authenticated Supabase student users via Bearer header
-  const { getRequestHeader } = await import("@tanstack/react-start/server");
-  const authHeader = getRequestHeader("authorization");
-  if (authHeader?.startsWith("Bearer ")) {
-    const token = authHeader.slice("Bearer ".length).trim();
-    const SUPABASE_URL = process.env["SUPABASE_URL"];
-    const SUPABASE_PUBLISHABLE_KEY = process.env["SUPABASE_PUBLISHABLE_KEY"];
-    if (token && SUPABASE_URL && SUPABASE_PUBLISHABLE_KEY) {
-      const { createClient } = await import("@supabase/supabase-js");
-      const sb = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
-        global: { headers: { Authorization: `Bearer ${token}` } },
-        auth: { storage: undefined, persistSession: false, autoRefreshToken: false },
-      });
-      const { data: userData } = await sb.auth.getUser(token);
-      if (userData?.user) {
-        const { data: profile } = await sb
-          .from("student_profiles")
-          .select("*")
-          .eq("user_id", userData.user.id)
-          .maybeSingle();
-        if (profile) return profile;
-        const { data: roleRow } = await sb
-          .from("user_roles")
-          .select("role")
-          .eq("user_id", userData.user.id)
-          .eq("role", "student")
-          .maybeSingle();
-        if (roleRow) return STUDENT_PROFILE;
-      }
+    const normalizedEmail = data.email.trim().toLowerCase();
+    const { data: userLookup, error: userErr } = await supabaseAdmin.auth.admin.getUserById(
+      context.userId,
+    );
+    if (userErr || !userLookup?.user?.email) {
+      throw new Error("تعذر التحقق من حساب المصادقة");
     }
-  }
+    if (userLookup.user.email.toLowerCase() !== normalizedEmail) {
+      throw new Error("البريد الإلكتروني المدخل لا يطابق بريد الحساب المسجل");
+    }
 
-  throw new Error("Unauthorized");
+    const { data: roster, error: rosterErr } = await supabaseAdmin
+      .from("student_roster")
+      .select("*")
+      .eq("student_code", data.studentCode)
+      .eq("is_active", true)
+      .maybeSingle();
+
+    if (rosterErr) {
+      throw new Error("تعذر التحقق من كشف الطلاب المؤهلين");
+    }
+    if (!roster || roster.approved_email.trim().toLowerCase() !== normalizedEmail) {
+      throw new Error("الرقم الجامعي أو البريد الإلكتروني غير مدرج في كشف الطلاب المؤهلين");
+    }
+
+    const { data: existingProfile } = await supabaseAdmin
+      .from("student_profiles")
+      .select("user_id")
+      .eq("student_code", data.studentCode)
+      .maybeSingle();
+    if (existingProfile && existingProfile.user_id !== context.userId) {
+      throw new Error("يوجد حساب مفعل بالفعل لهذا الرقم الجامعي");
+    }
+
+    const { data: existingByUser } = await supabaseAdmin
+      .from("registration_requests")
+      .select("id, status")
+      .eq("auth_user_id", context.userId)
+      .maybeSingle();
+    if (existingByUser) {
+      if (existingByUser.status === "pending") {
+        return { ok: true as const, status: "pending" as const };
+      }
+      if (existingByUser.status === "active") {
+        return { ok: true as const, status: "active" as const };
+      }
+      throw new Error("لا يمكن إعادة إرسال الطلب لهذا الحساب؛ يرجى مراجعة شؤون الطلاب");
+    }
+
+    const { data: existingByCode } = await supabaseAdmin
+      .from("registration_requests")
+      .select("id, status")
+      .eq("student_code", data.studentCode)
+      .in("status", ["pending", "active"])
+      .maybeSingle();
+    if (existingByCode) {
+      throw new Error("يوجد طلب تسجيل قائم أو مقبول لهذا الرقم الجامعي");
+    }
+
+    const { error: insertErr } = await supabaseAdmin.from("registration_requests").insert({
+      auth_user_id: context.userId,
+      roster_id: roster.id,
+      student_code: data.studentCode,
+      email: normalizedEmail,
+      full_name_ar: data.fullNameAr,
+      full_name_en: data.fullNameEn?.trim() || roster.full_name_en || null,
+      phone: data.phone?.trim() || null,
+      gender: data.gender ?? null,
+      status: "pending",
+    });
+
+    if (insertErr) {
+      throw new Error("تعذر تسجيل طلب الانضمام");
+    }
+
+    return { ok: true as const, status: "pending" as const };
+  });
+
+const contactSchema = z.object({
+  phone: z
+    .string()
+    .trim()
+    .regex(/^[0-9+\-\s]{7,20}$/, "رقم الهاتف غير صالح")
+    .nullable()
+    .or(z.literal("")),
 });
+
+/**
+ * Allows an active student to update ONLY their own permitted contact field (phone).
+ * Official academic and identity columns cannot be modified by students.
+ */
+export const updateOwnContactInfo = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => contactSchema.parse(d))
+  .handler(async ({ context, data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { requireActiveStudentServer } = await import("./auth.server");
+
+    await requireActiveStudentServer(context.userId);
+    const cleanPhone = data.phone && data.phone.trim().length > 0 ? data.phone.trim() : null;
+
+    const { data: updated, error } = await supabaseAdmin
+      .from("student_profiles")
+      .update({ phone: cleanPhone })
+      .eq("user_id", context.userId)
+      .select("*")
+      .single();
+
+    if (error || !updated) {
+      throw new Error("تعذر حفظ رقم الهاتف");
+    }
+
+    return updated;
+  });
