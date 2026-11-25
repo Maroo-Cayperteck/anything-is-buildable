@@ -8,10 +8,14 @@ export const getStudentPortalSnapshot = createServerFn({ method: "GET" })
     z.object({ semesterId: z.string().uuid().optional() }).optional().parse(d),
   )
   .handler(async ({ context, data }) => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { matchesStudentAudience, requireActiveStudentServer } = await import("./auth.server");
+    let db = context.supabase;
+    if (process.env["SUPABASE_SERVICE_ROLE_KEY"]) {
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      db = supabaseAdmin;
+    }
 
-    const student = await requireActiveStudentServer(context.userId);
+    const student = await requireActiveStudentServer(context.userId, db);
 
     const [
       { data: programRow },
@@ -25,38 +29,41 @@ export const getStudentPortalSnapshot = createServerFn({ method: "GET" })
       { data: gradeSummaries },
     ] = await Promise.all([
       student.program_id
-        ? supabaseAdmin.from("academic_programs").select("*").eq("id", student.program_id).maybeSingle()
+        ? db.from("academic_programs").select("*").eq("id", student.program_id).maybeSingle()
         : Promise.resolve({ data: null }),
       student.level_id
-        ? supabaseAdmin.from("academic_levels").select("*").eq("id", student.level_id).maybeSingle()
+        ? db.from("academic_levels").select("*").eq("id", student.level_id).maybeSingle()
         : Promise.resolve({ data: null }),
       student.academic_year_id
-        ? supabaseAdmin.from("academic_years").select("*").eq("id", student.academic_year_id).maybeSingle()
+        ? db.from("academic_years").select("*").eq("id", student.academic_year_id).maybeSingle()
         : Promise.resolve({ data: null }),
-      supabaseAdmin.from("semesters").select("*, academic_years(name)").order("created_at", { ascending: false }),
-      supabaseAdmin
+      db
+        .from("semesters")
+        .select("*, academic_years(name)")
+        .order("created_at", { ascending: false }),
+      db
         .from("enrollments")
         .select("*")
         .eq("student_user_id", student.user_id)
         .eq("status", "enrolled"),
-      supabaseAdmin
+      db
         .from("announcements")
         .select("*")
         .eq("is_published", true)
         .eq("is_archived", false)
         .order("published_at", { ascending: false }),
-      supabaseAdmin
+      db
         .from("academic_events")
         .select("*")
         .eq("is_published", true)
         .order("starts_at", { ascending: true }),
-      supabaseAdmin
+      db
         .from("student_grades")
         .select("*")
         .eq("student_user_id", student.user_id)
         .eq("is_published", true)
         .order("created_at", { ascending: true }),
-      supabaseAdmin
+      db
         .from("semester_grade_summaries")
         .select("*")
         .eq("student_user_id", student.user_id)
@@ -77,20 +84,29 @@ export const getStudentPortalSnapshot = createServerFn({ method: "GET" })
 
     const [{ data: offerings }, { data: groups }, { data: lectures }] = await Promise.all([
       offeringIds.length > 0
-        ? supabaseAdmin.from("course_offerings").select("*").in("id", offeringIds)
+        ? db.from("course_offerings").select("*").in("id", offeringIds)
         : Promise.resolve({ data: [] }),
       groupIds.length > 0
-        ? supabaseAdmin.from("academic_groups").select("*").in("id", groupIds)
+        ? db.from("academic_groups").select("*").in("id", groupIds)
         : Promise.resolve({ data: [] }),
       groupIds.length > 0
-        ? supabaseAdmin.from("lectures").select("*").in("group_id", groupIds).order("start_hour", { ascending: true })
+        ? db
+            .from("lectures")
+            .select("*")
+            .in("group_id", groupIds)
+            .order("start_hour", { ascending: true })
         : Promise.resolve({ data: [] }),
     ]);
 
-    const courseIds = [...new Set([...(offerings ?? []).map((o) => o.course_id), ...(grades ?? []).map((g) => g.course_id)])];
+    const courseIds = [
+      ...new Set([
+        ...(offerings ?? []).map((o) => o.course_id),
+        ...(grades ?? []).map((g) => g.course_id),
+      ]),
+    ];
     const { data: courses } =
       courseIds.length > 0
-        ? await supabaseAdmin.from("courses").select("*").in("id", courseIds)
+        ? await db.from("courses").select("*").in("id", courseIds)
         : { data: [] };
 
     const courseMap = new Map((courses ?? []).map((c) => [c.id, c]));
@@ -140,7 +156,9 @@ export const getStudentPortalSnapshot = createServerFn({ method: "GET" })
       })),
     );
 
-    const targetedAnnouncements = (announcements ?? []).filter((a) => matchesStudentAudience(a, student));
+    const targetedAnnouncements = (announcements ?? []).filter((a) =>
+      matchesStudentAudience(a, student),
+    );
     const targetedEvents = (events ?? []).filter((ev) => matchesStudentAudience(ev, student));
 
     // Group published grades by semester
@@ -154,7 +172,8 @@ export const getStudentPortalSnapshot = createServerFn({ method: "GET" })
         creditHours: crs?.credit_hours ?? 0,
         semesterName: sem?.name_ar ?? "—",
         semesterSeason: sem?.season ?? "",
-        academicYearName: (sem as { academic_years?: { name?: string } } | undefined)?.academic_years?.name ?? "",
+        academicYearName:
+          (sem as { academic_years?: { name?: string } } | undefined)?.academic_years?.name ?? "",
       };
     });
 
@@ -180,22 +199,31 @@ export const getStudentPortalSnapshot = createServerFn({ method: "GET" })
 export const getStudentDocumentsBundle = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { matchesStudentAudience, requireActiveStudentServer } = await import("./auth.server");
+    let db = context.supabase;
+    if (process.env["SUPABASE_SERVICE_ROLE_KEY"]) {
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      db = supabaseAdmin;
+    }
 
-    const student = await requireActiveStudentServer(context.userId);
+    const student = await requireActiveStudentServer(context.userId, db);
 
-    const [{ data: sharedDocs, error: sharedErr }, { data: privateDocs, error: privErr }] = await Promise.all([
-      supabaseAdmin.from("documents").select("*").eq("is_available", true).order("sort_order", { ascending: true }),
-      supabaseAdmin
-        .from("student_documents")
-        .select("*")
-        .eq("student_user_id", student.user_id)
-        .eq("is_available", true)
-        .order("created_at", { ascending: false }),
-    ]);
+    const [{ data: sharedDocs, error: sharedErr }, { data: privateDocs, error: privErr }] =
+      await Promise.all([
+        db
+          .from("documents")
+          .select("*")
+          .eq("is_available", true)
+          .order("sort_order", { ascending: true }),
+        db
+          .from("student_documents")
+          .select("*")
+          .eq("student_user_id", student.user_id)
+          .eq("is_available", true)
+          .order("created_at", { ascending: false }),
+      ]);
 
-    if (sharedErr || privErr) {
+    if (sharedErr && privErr) {
       throw new Error("تعذر تحميل الملفات من قاعدة البيانات");
     }
 

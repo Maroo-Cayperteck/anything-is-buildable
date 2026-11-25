@@ -1,21 +1,24 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import type { Database, Json } from "@/integrations/supabase/types";
 
 export type AppRole = Database["public"]["Enums"]["app_role"];
 export type AccountStatus = Database["public"]["Enums"]["account_status"];
 
-export async function getUserRolesServer(userId: string): Promise<AppRole[]> {
-  const { data, error } = await supabaseAdmin
-    .from("user_roles")
-    .select("role")
-    .eq("user_id", userId);
+export async function getUserRolesServer(
+  userId: string,
+  client: SupabaseClient<Database> = supabaseAdmin,
+): Promise<AppRole[]> {
+  const { data, error } = await client.from("user_roles").select("role").eq("user_id", userId);
   if (error) {
     throw new Error("تعذر التحقق من صلاحيات الحساب");
   }
   return (data ?? []).map((row) => row.role);
 }
 
-export async function requireAdminServer(userId: string): Promise<{ userId: string; actorLabel: string }> {
+export async function requireAdminServer(
+  userId: string,
+): Promise<{ userId: string; actorLabel: string }> {
   const roles = await getUserRolesServer(userId);
   if (!roles.includes("admin")) {
     throw new Error("Forbidden: تتطلب هذه العملية صلاحيات المسؤول");
@@ -30,15 +33,21 @@ export async function requireAdminServer(userId: string): Promise<{ userId: stri
   return { userId, actorLabel };
 }
 
-export async function requireActiveStudentServer(userId: string) {
-  const roles = await getUserRolesServer(userId);
-  const { data: profile, error } = await supabaseAdmin
+export async function requireActiveStudentServer(
+  userId: string,
+  client: SupabaseClient<Database> = supabaseAdmin,
+) {
+  const roles = await getUserRolesServer(userId, client);
+  const { data: profile, error } = await client
     .from("student_profiles")
     .select("*")
     .eq("user_id", userId)
     .maybeSingle();
   if (error) throw new Error("تعذر التحقق من ملف الطالب");
-  if (!roles.includes("student") || !profile || profile.account_status !== "active") {
+  // If 0004_migration.sql has not added account_status yet, treat existing pre-migration rows as active;
+  // once the column exists, strictly require account_status === "active".
+  const accountStatus = profile && "account_status" in profile ? profile.account_status : "active";
+  if (!roles.includes("student") || !profile || accountStatus !== "active") {
     throw new Error("Forbidden: الحساب غير نشط أو لا يملك صلاحية طالب معتمد");
   }
   return profile;

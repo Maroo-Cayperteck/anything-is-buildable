@@ -12,11 +12,16 @@ import {
   uploadPrivateStudentDocument,
   validatePdfFileClient,
 } from "@/lib/documents-storage";
+import { portalSignIn } from "@/lib/session";
 
 const mockFrom = vi.fn();
 const mockGetUserById = vi.fn();
 const mockStorageUpload = vi.fn();
 const mockStorageUploadToSignedUrl = vi.fn();
+const mockClientFrom = vi.fn();
+const mockSignInWithPassword = vi.fn();
+const mockSignOut = vi.fn();
+const mockGetAuthAccountStatus = vi.fn();
 
 vi.mock("@/integrations/supabase/client.server", () => ({
   supabaseAdmin: {
@@ -31,6 +36,11 @@ vi.mock("@/integrations/supabase/client.server", () => ({
 
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: {
+    from: (...args: unknown[]) => mockClientFrom(...args),
+    auth: {
+      signInWithPassword: (...args: unknown[]) => mockSignInWithPassword(...args),
+      signOut: (...args: unknown[]) => mockSignOut(...args),
+    },
     storage: {
       from: () => ({
         upload: (...args: unknown[]) => mockStorageUpload(...args),
@@ -38,6 +48,10 @@ vi.mock("@/integrations/supabase/client", () => ({
       }),
     },
   },
+}));
+
+vi.mock("@/lib/accounts.functions", () => ({
+  getAuthAccountStatus: (...args: unknown[]) => mockGetAuthAccountStatus(...args),
 }));
 
 const mockPrepare = vi.fn();
@@ -88,25 +102,45 @@ describe("Security, RBAC, and audience rules", () => {
     ).toBe(true);
     expect(
       matchesStudentAudience(
-        { audience_scope: "student", program_id: null, level_id: null, target_student_user_id: "user-b" },
+        {
+          audience_scope: "student",
+          program_id: null,
+          level_id: null,
+          target_student_user_id: "user-b",
+        },
         studentA,
       ),
     ).toBe(false);
     expect(
       matchesStudentAudience(
-        { audience_scope: "student", program_id: null, level_id: null, target_student_user_id: "user-a" },
+        {
+          audience_scope: "student",
+          program_id: null,
+          level_id: null,
+          target_student_user_id: "user-a",
+        },
         studentA,
       ),
     ).toBe(true);
     expect(
       matchesStudentAudience(
-        { audience_scope: "program", program_id: "prog-2", level_id: null, target_student_user_id: null },
+        {
+          audience_scope: "program",
+          program_id: "prog-2",
+          level_id: null,
+          target_student_user_id: null,
+        },
         studentA,
       ),
     ).toBe(false);
     expect(
       matchesStudentAudience(
-        { audience_scope: "level", program_id: null, level_id: "lvl-2", target_student_user_id: null },
+        {
+          audience_scope: "level",
+          program_id: null,
+          level_id: "lvl-2",
+          target_student_user_id: null,
+        },
         studentA,
       ),
     ).toBe(true);
@@ -140,7 +174,9 @@ describe("Security, RBAC, and audience rules", () => {
     for (const status of ["pending", "suspended", "rejected"] as const) {
       mockFrom.mockImplementation((table: string) => {
         if (table === "user_roles") {
-          return { select: () => ({ eq: async () => ({ data: [{ role: "student" }], error: null }) }) };
+          return {
+            select: () => ({ eq: async () => ({ data: [{ role: "student" }], error: null }) }),
+          };
         }
         return {
           select: () => ({
@@ -179,9 +215,9 @@ describe("Document upload failure handling (no fake success)", () => {
     mockStorageUpload.mockResolvedValue({ error: { message: "Storage quota error" } });
 
     const pdf = new File(["%PDF-1.4\n"], "test.pdf", { type: "application/pdf" });
-    await expect(uploadAndPublishDocument("11111111-1111-1111-1111-111111111111", pdf)).rejects.toThrow(
-      /Storage quota error/,
-    );
+    await expect(
+      uploadAndPublishDocument("11111111-1111-1111-1111-111111111111", pdf),
+    ).rejects.toThrow(/Storage quota error/);
     expect(mockCommitShared).not.toHaveBeenCalled();
   });
 
@@ -198,9 +234,9 @@ describe("Document upload failure handling (no fake success)", () => {
     mockCleanupOrphan.mockResolvedValue({ ok: true });
 
     const pdf = new File(["%PDF-1.4\n"], "test.pdf", { type: "application/pdf" });
-    await expect(uploadAndPublishDocument("11111111-1111-1111-1111-111111111111", pdf)).rejects.toThrow(
-      /DB write failed/,
-    );
+    await expect(
+      uploadAndPublishDocument("11111111-1111-1111-1111-111111111111", pdf),
+    ).rejects.toThrow(/DB write failed/);
     expect(mockStorageUploadToSignedUrl).toHaveBeenCalledWith(
       "docs/11111111-1111-1111-1111-111111111111/test.pdf",
       "signed-upload-token",
@@ -279,5 +315,135 @@ describe("Document upload failure handling (no fake success)", () => {
     mockAdminListDocs.mockResolvedValue(docs);
     await expect(fetchAllDocuments()).resolves.toEqual(docs);
     expect(mockAdminListDocs).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("Authentication resilience and pre-migration fallback", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockSignOut.mockResolvedValue({ error: null });
+  });
+
+  it("recovers cleanly when getAuthAccountStatus fails after signInWithPassword succeeds", async () => {
+    mockSignInWithPassword.mockResolvedValue({
+      data: { user: { id: "stu-1" }, session: { access_token: "tok" } },
+      error: null,
+    });
+    mockGetAuthAccountStatus.mockRejectedValue(new Error("Missing SUPABASE_SERVICE_ROLE_KEY"));
+    mockClientFrom.mockImplementation((table: string) => {
+      if (table === "user_roles") {
+        return {
+          select: () => ({ eq: async () => ({ data: [{ role: "student" }], error: null }) }),
+        };
+      }
+      if (table === "student_profiles") {
+        return {
+          select: () => ({
+            eq: () => ({
+              maybeSingle: async () => ({
+                data: { user_id: "stu-1", account_status: "active" },
+                error: null,
+              }),
+            }),
+          }),
+        };
+      }
+      return {
+        select: () => ({
+          eq: () => ({ maybeSingle: async () => ({ data: null, error: null }) }),
+        }),
+      };
+    });
+
+    await expect(portalSignIn("925250059", "secret")).resolves.toEqual({
+      error: null,
+      role: "student",
+    });
+  });
+
+  it("allows pre-migration student login when account_status column does not exist yet", async () => {
+    mockSignInWithPassword.mockResolvedValue({
+      data: { user: { id: "stu-legacy" }, session: { access_token: "tok" } },
+      error: null,
+    });
+    mockGetAuthAccountStatus.mockRejectedValue(new Error("Server RPC unavailable"));
+    mockClientFrom.mockImplementation((table: string) => {
+      if (table === "user_roles") {
+        return {
+          select: () => ({ eq: async () => ({ data: [{ role: "student" }], error: null }) }),
+        };
+      }
+      if (table === "student_profiles") {
+        return {
+          select: (cols: string) => ({
+            eq: () => ({
+              maybeSingle: async () =>
+                cols.includes("account_status")
+                  ? {
+                      data: null,
+                      error: {
+                        code: "42703",
+                        message: "column student_profiles.account_status does not exist",
+                      },
+                    }
+                  : { data: { user_id: "stu-legacy" }, error: null },
+            }),
+          }),
+        };
+      }
+      return {
+        select: () => ({
+          eq: () => ({
+            maybeSingle: async () => ({
+              data: null,
+              error: { code: "42P01", message: "relation does not exist" },
+            }),
+          }),
+        }),
+      };
+    });
+
+    await expect(portalSignIn("925250059", "secret")).resolves.toEqual({
+      error: null,
+      role: "student",
+    });
+  });
+
+  it("still blocks suspended students even when falling back from getAuthAccountStatus failure", async () => {
+    mockSignInWithPassword.mockResolvedValue({
+      data: { user: { id: "stu-susp" }, session: { access_token: "tok" } },
+      error: null,
+    });
+    mockGetAuthAccountStatus.mockRejectedValue(new Error("Server RPC unavailable"));
+    mockClientFrom.mockImplementation((table: string) => {
+      if (table === "user_roles") {
+        return {
+          select: () => ({ eq: async () => ({ data: [{ role: "student" }], error: null }) }),
+        };
+      }
+      if (table === "student_profiles") {
+        return {
+          select: () => ({
+            eq: () => ({
+              maybeSingle: async () => ({
+                data: { user_id: "stu-susp", account_status: "suspended" },
+                error: null,
+              }),
+            }),
+          }),
+        };
+      }
+      return {
+        select: () => ({
+          eq: () => ({ maybeSingle: async () => ({ data: null, error: null }) }),
+        }),
+      };
+    });
+
+    await expect(portalSignIn("925250059", "secret")).resolves.toEqual({
+      error: "تم تعليق هذا الحساب من قِبل إدارة شؤون الطلاب",
+      role: null,
+    });
+    expect(mockSignOut).toHaveBeenCalledTimes(1);
   });
 });

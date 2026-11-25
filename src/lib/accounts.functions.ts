@@ -9,27 +9,50 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 export const getAuthAccountStatus = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { getUserRolesServer } = await import("./auth.server");
+    let client = context.supabase;
+    if (process.env["SUPABASE_SERVICE_ROLE_KEY"]) {
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      client = supabaseAdmin;
+    }
 
-    const roles = await getUserRolesServer(context.userId);
-    const [{ data: profile }, { data: regRequest }] = await Promise.all([
-      supabaseAdmin
+    const roles = await getUserRolesServer(context.userId, client);
+    const [{ data: profile, error: profileErr }, { data: regRequest }] = await Promise.all([
+      client
         .from("student_profiles")
         .select("user_id, account_status, full_name_ar, student_code")
         .eq("user_id", context.userId)
         .maybeSingle(),
-      supabaseAdmin
+      client
         .from("registration_requests")
         .select("status, rejection_reason")
         .eq("auth_user_id", context.userId)
         .maybeSingle(),
     ]);
 
+    let accountStatus = profile?.account_status ?? null;
+    if (profileErr) {
+      const msg = (profileErr.message ?? "").toLowerCase();
+      const missingAccountStatusCol =
+        profileErr.code === "42703" ||
+        profileErr.code === "PGRST204" ||
+        (msg.includes("account_status") && msg.includes("column"));
+      if (missingAccountStatusCol) {
+        const { data: legacyProfile } = await client
+          .from("student_profiles")
+          .select("user_id")
+          .eq("user_id", context.userId)
+          .maybeSingle();
+        if (legacyProfile || roles.includes("student")) {
+          accountStatus = "active";
+        }
+      }
+    }
+
     return {
       userId: context.userId,
       roles,
-      accountStatus: profile?.account_status ?? null,
+      accountStatus,
       registrationStatus: regRequest?.status ?? null,
       rejectionReason: regRequest?.rejection_reason ?? null,
     };
@@ -60,7 +83,9 @@ export const submitRegistrationRequest = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
     const normalizedEmail = data.email.trim().toLowerCase();
-    const { data: userLookup, error: userErr } = await supabaseAdmin.auth.admin.getUserById(context.userId);
+    const { data: userLookup, error: userErr } = await supabaseAdmin.auth.admin.getUserById(
+      context.userId,
+    );
     if (userErr || !userLookup?.user?.email) {
       throw new Error("تعذر التحقق من حساب المصادقة");
     }
