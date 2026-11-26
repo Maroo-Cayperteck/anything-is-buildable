@@ -83,7 +83,8 @@ export const adminCreateDocument = createServerFn({ method: "POST" })
         audience_scope: data.audience_scope,
         program_id: data.audience_scope === "program" ? data.program_id : null,
         level_id: data.audience_scope === "level" ? data.level_id : null,
-        target_student_user_id: data.audience_scope === "student" ? data.target_student_user_id : null,
+        target_student_user_id:
+          data.audience_scope === "student" ? data.target_student_user_id : null,
         offering_id: data.offering_id,
         doc_category: data.doc_category,
         is_available: data.is_available,
@@ -207,7 +208,11 @@ export const adminPreparePdfUpload = createServerFn({ method: "POST" })
     await requireAdminServer(context.userId);
 
     const safeName = sanitizePdfFilename(data.fileName);
-    if (data.contentType && data.contentType !== "application/pdf" && !safeName.toLowerCase().endsWith(".pdf")) {
+    if (
+      data.contentType &&
+      data.contentType !== "application/pdf" &&
+      !safeName.toLowerCase().endsWith(".pdf")
+    ) {
       throw new Error("يُسمح بملفات PDF فقط");
     }
 
@@ -277,7 +282,9 @@ async function verifyUploadedPdfInStorage(bucket: string, storagePath: string) {
   const { isPdfMagicHeader } = await import("./auth.server");
 
   let head: Uint8Array | null = null;
-  const { data: signed } = await supabaseAdmin.storage.from(bucket).createSignedUrl(storagePath, 60);
+  const { data: signed } = await supabaseAdmin.storage
+    .from(bucket)
+    .createSignedUrl(storagePath, 60);
   if (signed?.signedUrl) {
     try {
       const resp = await fetch(signed.signedUrl, { headers: { Range: "bytes=0-7" } });
@@ -298,9 +305,56 @@ async function verifyUploadedPdfInStorage(bucket: string, storagePath: string) {
   }
 
   if (!isPdfMagicHeader(head)) {
-    await supabaseAdmin.storage.from(bucket).remove([storagePath]).catch(() => {});
+    await supabaseAdmin.storage
+      .from(bucket)
+      .remove([storagePath])
+      .catch(() => {});
     throw new Error("الملف المرفوع ليس ملف PDF صالحًا");
   }
+}
+
+async function enqueueStorageCleanup(
+  bucket: string,
+  storagePath: string,
+  reason: string,
+  lastError: string,
+) {
+  try {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    await supabaseAdmin.from("storage_cleanup_queue").insert({
+      bucket,
+      storage_path: storagePath,
+      reason,
+      last_error: lastError.slice(0, 500),
+    });
+  } catch (err) {
+    console.error("[storage] Failed to record cleanup queue entry:", { bucket, storagePath, err });
+  }
+}
+
+async function removeStorageObjectSafely(
+  bucket: string,
+  storagePath: string,
+  reason: string,
+): Promise<boolean> {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { error } = await supabaseAdmin.storage.from(bucket).remove([storagePath]);
+  if (error) {
+    console.error("[storage] Object removal failed; queuing cleanup:", {
+      bucket,
+      storagePath,
+      reason,
+      msg: error.message,
+    });
+    await enqueueStorageCleanup(
+      bucket,
+      storagePath,
+      reason,
+      error.message || "storage remove failed",
+    );
+    return false;
+  }
+  return true;
 }
 
 export const adminCleanupOrphanUpload = createServerFn({ method: "POST" })
@@ -326,7 +380,7 @@ export const adminCleanupOrphanUpload = createServerFn({ method: "POST" })
         .eq("file_path", data.storagePath)
         .maybeSingle();
       if (ref) return { ok: false as const };
-      await supabaseAdmin.storage.from(SHARED_BUCKET).remove([data.storagePath]).catch(() => {});
+      await removeStorageObjectSafely(SHARED_BUCKET, data.storagePath, "orphan_upload_cleanup");
       return { ok: true as const };
     }
 
@@ -337,7 +391,7 @@ export const adminCleanupOrphanUpload = createServerFn({ method: "POST" })
       .eq("file_path", data.storagePath)
       .maybeSingle();
     if (ref) return { ok: false as const };
-    await supabaseAdmin.storage.from(PRIVATE_BUCKET).remove([data.storagePath]).catch(() => {});
+    await removeStorageObjectSafely(PRIVATE_BUCKET, data.storagePath, "orphan_upload_cleanup");
     return { ok: true as const };
   });
 
@@ -346,7 +400,8 @@ export const adminCommitSharedUpload = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => commitSharedUploadSchema.parse(d))
   .handler(async ({ context, data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { logAdminActivity, requireAdminServer, sanitizePdfFilename } = await import("./auth.server");
+    const { logAdminActivity, requireAdminServer, sanitizePdfFilename } =
+      await import("./auth.server");
     const admin = await requireAdminServer(context.userId);
 
     if (!data.storagePath.startsWith(`docs/${data.docId}/`)) {
@@ -368,8 +423,10 @@ export const adminCommitSharedUpload = createServerFn({ method: "POST" })
       .single();
 
     if (dbErr || !updated || updated.file_path !== data.storagePath) {
-      await supabaseAdmin.storage.from(SHARED_BUCKET).remove([data.storagePath]).catch(() => {});
-      throw new Error(dbErr?.message || "فشل حفظ بيانات الملف في قاعدة البيانات؛ تم التراجع عن الرفع");
+      await removeStorageObjectSafely(SHARED_BUCKET, data.storagePath, "shared_commit_rollback");
+      throw new Error(
+        dbErr?.message || "فشل حفظ بيانات الملف في قاعدة البيانات؛ تم التراجع عن الرفع",
+      );
     }
 
     // Safely remove previous Storage object ONLY after DB update succeeded
@@ -379,7 +436,7 @@ export const adminCommitSharedUpload = createServerFn({ method: "POST" })
       !data.previousPath.startsWith("/") &&
       !data.previousPath.startsWith("idb:")
     ) {
-      await supabaseAdmin.storage.from(SHARED_BUCKET).remove([data.previousPath]).catch(() => {});
+      await removeStorageObjectSafely(SHARED_BUCKET, data.previousPath, "shared_replace_old_file");
     }
 
     await logAdminActivity({
@@ -409,7 +466,8 @@ export const adminCommitPrivateStudentUpload = createServerFn({ method: "POST" }
   .inputValidator((d: unknown) => commitPrivateUploadSchema.parse(d))
   .handler(async ({ context, data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { logAdminActivity, requireAdminServer, sanitizePdfFilename } = await import("./auth.server");
+    const { logAdminActivity, requireAdminServer, sanitizePdfFilename } =
+      await import("./auth.server");
     const admin = await requireAdminServer(context.userId);
 
     if (!data.storagePath.startsWith(`students/${data.studentUserId}/`)) {
@@ -435,7 +493,7 @@ export const adminCommitPrivateStudentUpload = createServerFn({ method: "POST" }
       .single();
 
     if (dbErr || !created || created.file_path !== data.storagePath) {
-      await supabaseAdmin.storage.from(PRIVATE_BUCKET).remove([data.storagePath]).catch(() => {});
+      await removeStorageObjectSafely(PRIVATE_BUCKET, data.storagePath, "private_commit_rollback");
       throw new Error(dbErr?.message || "تعذر حفظ الملف الخاص بالطالب في قاعدة البيانات");
     }
 
@@ -470,11 +528,14 @@ export const adminDeleteDocument = createServerFn({ method: "POST" })
     const { error: delErr } = await supabaseAdmin.from("documents").delete().eq("id", data.id);
     if (delErr) throw new Error(delErr.message || "تعذر حذف سجل المستند");
 
+    let storageCleanupQueued = false;
     if (doc.file_path && !doc.file_path.startsWith("/") && !doc.file_path.startsWith("idb:")) {
-      const { error: storageErr } = await supabaseAdmin.storage.from(SHARED_BUCKET).remove([doc.file_path]);
-      if (storageErr) {
-        console.error("[storage] Deleted DB row but failed to remove storage object:", storageErr);
-      }
+      const removed = await removeStorageObjectSafely(
+        SHARED_BUCKET,
+        doc.file_path,
+        "delete_shared_document",
+      );
+      storageCleanupQueued = !removed;
     }
 
     await logAdminActivity({
@@ -483,10 +544,10 @@ export const adminDeleteDocument = createServerFn({ method: "POST" })
       action: "delete_document",
       entityType: "documents",
       entityId: doc.id,
-      metadata: { title: doc.title },
+      metadata: { title: doc.title, storage_cleanup_queued: storageCleanupQueued },
     });
 
-    return { ok: true as const };
+    return { ok: true as const, storageCleanupQueued };
   });
 
 export const adminUpdatePrivateStudentDocument = createServerFn({ method: "POST" })
@@ -534,11 +595,20 @@ export const adminDeletePrivateStudentDocument = createServerFn({ method: "POST"
       .maybeSingle();
     if (fetchErr || !doc) throw new Error("الملف غير موجود");
 
-    const { error: delErr } = await supabaseAdmin.from("student_documents").delete().eq("id", data.id);
+    const { error: delErr } = await supabaseAdmin
+      .from("student_documents")
+      .delete()
+      .eq("id", data.id);
     if (delErr) throw new Error("تعذر حذف سجل الملف");
 
+    let storageCleanupQueued = false;
     if (doc.file_path && !doc.file_path.startsWith("/")) {
-      await supabaseAdmin.storage.from(PRIVATE_BUCKET).remove([doc.file_path]).catch(() => {});
+      const removed = await removeStorageObjectSafely(
+        PRIVATE_BUCKET,
+        doc.file_path,
+        "delete_private_document",
+      );
+      storageCleanupQueued = !removed;
     }
 
     await logAdminActivity({
@@ -547,15 +617,21 @@ export const adminDeletePrivateStudentDocument = createServerFn({ method: "POST"
       action: "delete_student_document",
       entityType: "student_documents",
       entityId: doc.id,
-      metadata: { title: doc.title, student_user_id: doc.student_user_id },
+      metadata: {
+        title: doc.title,
+        student_user_id: doc.student_user_id,
+        storage_cleanup_queued: storageCleanupQueued,
+      },
     });
 
-    return { ok: true as const };
+    return { ok: true as const, storageCleanupQueued };
   });
 
 export const adminReorderDocuments = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => z.object({ orderedIds: z.array(z.string().uuid()).min(1) }).parse(d))
+  .inputValidator((d: unknown) =>
+    z.object({ orderedIds: z.array(z.string().uuid()).min(1) }).parse(d),
+  )
   .handler(async ({ context, data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { logAdminActivity, requireAdminServer } = await import("./auth.server");
@@ -563,7 +639,10 @@ export const adminReorderDocuments = createServerFn({ method: "POST" })
 
     for (let i = 0; i < data.orderedIds.length; i++) {
       const id = data.orderedIds[i]!;
-      const { error } = await supabaseAdmin.from("documents").update({ sort_order: i + 1 }).eq("id", id);
+      const { error } = await supabaseAdmin
+        .from("documents")
+        .update({ sort_order: i + 1 })
+        .eq("id", id);
       if (error) throw new Error("تعذر حفظ ترتيب الملفات");
     }
 
@@ -594,11 +673,8 @@ export const getAuthorizedDocumentUrl = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => signedUrlRequestSchema.parse(d))
   .handler(async ({ context, data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const {
-      getUserRolesServer,
-      matchesStudentAudience,
-      requireActiveStudentServer,
-    } = await import("./auth.server");
+    const { getUserRolesServer, matchesStudentAudience, requireActiveStudentServer } =
+      await import("./auth.server");
 
     const roles = await getUserRolesServer(context.userId);
     const isAdmin = roles.includes("admin");

@@ -175,8 +175,8 @@ export async function deletePrivateStudentDocument(id: string) {
   return await adminDeletePrivateStudentDocument({ data: { id } });
 }
 
-export async function deleteDocumentRecord(doc: Pick<Doc, "id">): Promise<void> {
-  await adminDeleteDocument({ data: { id: doc.id } });
+export async function deleteDocumentRecord(doc: Pick<Doc, "id">) {
+  return await adminDeleteDocument({ data: { id: doc.id } });
 }
 
 export async function reorderDocumentList(list: Doc[]): Promise<void> {

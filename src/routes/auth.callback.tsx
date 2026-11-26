@@ -39,7 +39,8 @@ function AuthCallbackPage() {
         const params = new URLSearchParams(window.location.search);
         const errorDesc = params.get("error_description") || params.get("error");
         if (errorDesc) {
-          if (active) setState({ kind: "error", message: "تم إلغاء رابط التأكيد أو انتهت صلاحيته." });
+          if (active)
+            setState({ kind: "error", message: "تم إلغاء رابط التأكيد أو انتهت صلاحيته." });
           return;
         }
 
@@ -50,7 +51,8 @@ function AuthCallbackPage() {
         if (code) {
           const { error: exErr } = await supabase.auth.exchangeCodeForSession(code);
           if (exErr) {
-            if (active) setState({ kind: "error", message: "رابط التأكيد غير صالح أو منتهي الصلاحية." });
+            if (active)
+              setState({ kind: "error", message: "رابط التأكيد غير صالح أو منتهي الصلاحية." });
             return;
           }
         } else if (tokenHash && otpType) {
@@ -59,7 +61,8 @@ function AuthCallbackPage() {
             type: otpType as "signup" | "email" | "recovery",
           });
           if (otpErr) {
-            if (active) setState({ kind: "error", message: "تعذر التحقق من رمز تأكيد البريد الإلكتروني." });
+            if (active)
+              setState({ kind: "error", message: "تعذر التحقق من رمز تأكيد البريد الإلكتروني." });
             return;
           }
         }
@@ -69,7 +72,8 @@ function AuthCallbackPage() {
           if (active) {
             setState({
               kind: "error",
-              message: "لم يتم العثور على جلسة مؤكدة. يمكنك تسجيل الدخول ببريدك الشخصي لاستكمال الحالة.",
+              message:
+                "لم يتم العثور على جلسة مؤكدة. يمكنك تسجيل الدخول ببريدك الشخصي لاستكمال الحالة.",
             });
           }
           return;
@@ -91,11 +95,18 @@ function AuthCallbackPage() {
         await supabase.auth.signOut().catch(() => {});
 
         if (result.status === "rejected") {
-          setState({ kind: "rejected", reason: "rejectionReason" in result ? result.rejectionReason : null });
+          setState({
+            kind: "rejected",
+            reason: "rejectionReason" in result ? result.rejectionReason : null,
+          });
           return;
         }
 
-        setState({ kind: "completed_pending", studentCode: result.studentCode, status: result.status });
+        setState({
+          kind: "completed_pending",
+          studentCode: result.studentCode,
+          status: result.status,
+        });
       } catch (err) {
         if (active) {
           setState({
@@ -156,8 +167,8 @@ function AuthCallbackPage() {
               <CheckCircle2 className="mx-auto h-9 w-9 text-success" />
               <h2 className="font-bold">تم تأكيد البريد وإحالة طلبك للمراجعة</h2>
               <p className="text-sm text-muted-foreground">
-                الرقم الجامعي <span className="font-mono font-semibold">{state.studentCode}</span> قيد المراجعة الآن من
-                إدارة شؤون الطلاب. لن يتم فتح البوابة إلا بعد اعتماد المسؤول.
+                الرقم الجامعي <span className="font-mono font-semibold">{state.studentCode}</span>{" "}
+                قيد المراجعة الآن من إدارة شؤون الطلاب. لن يتم فتح البوابة إلا بعد اعتماد المسؤول.
               </p>
               <Button asChild variant="brand" className="w-full">
                 <Link to="/">العودة لصفحة تسجيل الدخول</Link>
@@ -169,7 +180,9 @@ function AuthCallbackPage() {
             <div className="space-y-4 rounded-xl border bg-success-soft/60 p-5">
               <CheckCircle2 className="mx-auto h-9 w-9 text-success" />
               <h2 className="font-bold">حسابك مفعل بالفعل</h2>
-              <p className="text-sm text-muted-foreground">يمكنك المتابعة مباشرة إلى بوابة الطالب.</p>
+              <p className="text-sm text-muted-foreground">
+                يمكنك المتابعة مباشرة إلى بوابة الطالب.
+              </p>
               <Button asChild variant="brand" className="w-full">
                 <Link to="/portal">الانتقال إلى بوابة الطالب</Link>
               </Button>
@@ -180,7 +193,9 @@ function AuthCallbackPage() {
             <div className="space-y-4 rounded-xl border bg-destructive/10 p-5">
               <AlertCircle className="mx-auto h-9 w-9 text-destructive" />
               <h2 className="font-bold text-destructive">تم رفض طلب التسجيل</h2>
-              <p className="text-sm text-muted-foreground">{state.reason || "يرجى مراجعة إدارة شؤون الطلاب."}</p>
+              <p className="text-sm text-muted-foreground">
+                {state.reason || "يرجى مراجعة إدارة شؤون الطلاب."}
+              </p>
               <Button asChild variant="outline" className="w-full">
                 <Link to="/">العودة للرئيسية</Link>
               </Button>
@@ -190,8 +205,9 @@ function AuthCallbackPage() {
           {state.kind === "needs_intent" && (
             <form onSubmit={handleRecoverySubmit} className="space-y-4 text-right">
               <p className="text-sm text-muted-foreground">
-                تم تأكيد بريدك الإلكتروني (<span className="font-mono">{state.email}</span>)، لكن انتهت صلاحية بيانات الطلب
-                الأولية. أدخل الرقم الجامعي والاسم لإرسال طلب المراجعة للمسؤول:
+                تم تأكيد بريدك الإلكتروني (<span className="font-mono">{state.email}</span>)، لكن
+                انتهت صلاحية بيانات الطلب الأولية. أدخل الرقم الجامعي والاسم لإرسال طلب المراجعة
+                للمسؤول:
               </p>
               <Input
                 value={studentCode}
@@ -213,10 +229,18 @@ function AuthCallbackPage() {
                 placeholder="رقم الهاتف (اختياري)"
               />
               {recoveryError && (
-                <div className="rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive">{recoveryError}</div>
+                <div className="rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                  {recoveryError}
+                </div>
               )}
-              <Button type="submit" variant="brand" disabled={submittingRecovery} className="w-full">
-                {submittingRecovery ? <Loader2 className="h-4 w-4 animate-spin" /> : null} استكمال وإرسال الطلب
+              <Button
+                type="submit"
+                variant="brand"
+                disabled={submittingRecovery}
+                className="w-full"
+              >
+                {submittingRecovery ? <Loader2 className="h-4 w-4 animate-spin" /> : null} استكمال
+                وإرسال الطلب
               </Button>
             </form>
           )}

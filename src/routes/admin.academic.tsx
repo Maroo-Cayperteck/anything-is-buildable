@@ -27,7 +27,10 @@ export const Route = createFileRoute("/admin/academic")({
 
 function AdminAcademicPage() {
   const qc = useQueryClient();
-  const catalog = useQuery({ queryKey: ["admin-academic-catalog"], queryFn: () => getAcademicCatalog() });
+  const catalog = useQuery({
+    queryKey: ["admin-academic-catalog"],
+    queryFn: () => getAcademicCatalog(),
+  });
   const refresh = () => qc.invalidateQueries({ queryKey: ["admin-academic-catalog"] });
 
   // Program & Level
@@ -56,7 +59,9 @@ function AdminAcademicPage() {
   const [gName, setGName] = useState("");
   const [gInstructor, setGInstructor] = useState("");
   const [lecGroupId, setLecGroupId] = useState("");
-  const [lecDay, setLecDay] = useState<"Saturday" | "Sunday" | "Monday" | "Tuesday" | "Wednesday" | "Thursday">("Saturday");
+  const [lecDay, setLecDay] = useState<
+    "Saturday" | "Sunday" | "Monday" | "Tuesday" | "Wednesday" | "Thursday"
+  >("Saturday");
   const [lecStart, setLecStart] = useState("08:00");
   const [lecEnd, setLecEnd] = useState("10:00");
   const [lecKind, setLecKind] = useState<SlotKind>("lecture");
@@ -104,7 +109,9 @@ function AdminAcademicPage() {
             onSubmit={async (e) => {
               e.preventDefault();
               try {
-                await adminUpsertProgram({ data: { code: pCode, name_ar: pNameAr, faculty: pFaculty } });
+                await adminUpsertProgram({
+                  data: { code: pCode, name_ar: pNameAr, faculty: pFaculty },
+                });
                 setPCode("");
                 setPNameAr("");
                 setPFaculty("");
@@ -117,9 +124,24 @@ function AdminAcademicPage() {
           >
             <div className="text-xs font-semibold text-muted-foreground">إضافة برنامج أكاديمي</div>
             <div className="grid gap-2 sm:grid-cols-3">
-              <Input value={pCode} onChange={(e) => setPCode(e.target.value)} dir="ltr" placeholder="الكود (NCSE)" required />
-              <Input value={pNameAr} onChange={(e) => setPNameAr(e.target.value)} placeholder="اسم البرنامج" required />
-              <Input value={pFaculty} onChange={(e) => setPFaculty(e.target.value)} placeholder="الكلية" />
+              <Input
+                value={pCode}
+                onChange={(e) => setPCode(e.target.value)}
+                dir="ltr"
+                placeholder="الكود (NCSE)"
+                required
+              />
+              <Input
+                value={pNameAr}
+                onChange={(e) => setPNameAr(e.target.value)}
+                placeholder="اسم البرنامج"
+                required
+              />
+              <Input
+                value={pFaculty}
+                onChange={(e) => setPFaculty(e.target.value)}
+                placeholder="الكلية"
+              />
             </div>
             <Button size="sm" variant="brand" type="submit">
               <Plus className="h-4 w-4" /> حفظ البرنامج
@@ -131,7 +153,9 @@ function AdminAcademicPage() {
             onSubmit={async (e) => {
               e.preventDefault();
               try {
-                await adminUpsertLevel({ data: { program_id: lProgramId, level_number: Number(lNumber), name_ar: lNameAr } });
+                await adminUpsertLevel({
+                  data: { program_id: lProgramId, level_number: Number(lNumber), name_ar: lNameAr },
+                });
                 setLNameAr("");
                 await refresh();
                 toast.success("تم حفظ المستوى");
@@ -142,7 +166,12 @@ function AdminAcademicPage() {
           >
             <div className="text-xs font-semibold text-muted-foreground">إضافة مستوى دراسي</div>
             <div className="grid gap-2 sm:grid-cols-3">
-              <select className="rounded-lg border bg-background px-3 py-2 text-sm" value={lProgramId} onChange={(e) => setLProgramId(e.target.value)} required>
+              <select
+                className="rounded-lg border bg-background px-3 py-2 text-sm"
+                value={lProgramId}
+                onChange={(e) => setLProgramId(e.target.value)}
+                required
+              >
                 <option value="">اختر البرنامج</option>
                 {programs.map((pr) => (
                   <option key={pr.id} value={pr.id}>
@@ -150,8 +179,22 @@ function AdminAcademicPage() {
                   </option>
                 ))}
               </select>
-              <Input value={lNumber} onChange={(e) => setLNumber(e.target.value)} type="number" min="1" max="10" dir="ltr" placeholder="رقم المستوى" required />
-              <Input value={lNameAr} onChange={(e) => setLNameAr(e.target.value)} placeholder="المستوى الثاني" required />
+              <Input
+                value={lNumber}
+                onChange={(e) => setLNumber(e.target.value)}
+                type="number"
+                min="1"
+                max="10"
+                dir="ltr"
+                placeholder="رقم المستوى"
+                required
+              />
+              <Input
+                value={lNameAr}
+                onChange={(e) => setLNameAr(e.target.value)}
+                placeholder="المستوى الثاني"
+                required
+              />
             </div>
             <Button size="sm" variant="outline" type="submit">
               <Plus className="h-4 w-4" /> حفظ المستوى
@@ -180,9 +223,17 @@ function AdminAcademicPage() {
               }
             }}
           >
-            <div className="text-xs font-semibold text-muted-foreground">إضافة عام أكاديمي (يُعيّن كحالي)</div>
+            <div className="text-xs font-semibold text-muted-foreground">
+              إضافة عام أكاديمي (يُعيّن كحالي)
+            </div>
             <div className="flex gap-2">
-              <Input value={yName} onChange={(e) => setYName(e.target.value)} dir="ltr" placeholder="2026 / 2027" required />
+              <Input
+                value={yName}
+                onChange={(e) => setYName(e.target.value)}
+                dir="ltr"
+                placeholder="2026 / 2027"
+                required
+              />
               <Button size="sm" variant="brand" type="submit">
                 <Plus className="h-4 w-4" /> حفظ
               </Button>
@@ -195,7 +246,13 @@ function AdminAcademicPage() {
               e.preventDefault();
               try {
                 await adminUpsertSemester({
-                  data: { academic_year_id: sYearId, season: sSeason, name_ar: sNameAr, is_current: sCurrent, is_closed: false },
+                  data: {
+                    academic_year_id: sYearId,
+                    season: sSeason,
+                    name_ar: sNameAr,
+                    is_current: sCurrent,
+                    is_closed: false,
+                  },
                 });
                 setSNameAr("");
                 await refresh();
@@ -207,7 +264,12 @@ function AdminAcademicPage() {
           >
             <div className="text-xs font-semibold text-muted-foreground">إضافة فصل دراسي</div>
             <div className="grid gap-2 sm:grid-cols-3">
-              <select className="rounded-lg border bg-background px-3 py-2 text-sm" value={sYearId} onChange={(e) => setSYearId(e.target.value)} required>
+              <select
+                className="rounded-lg border bg-background px-3 py-2 text-sm"
+                value={sYearId}
+                onChange={(e) => setSYearId(e.target.value)}
+                required
+              >
                 <option value="">العام الأكاديمي</option>
                 {years.map((y) => (
                   <option key={y.id} value={y.id}>
@@ -215,21 +277,106 @@ function AdminAcademicPage() {
                   </option>
                 ))}
               </select>
-              <select className="rounded-lg border bg-background px-3 py-2 text-sm" value={sSeason} onChange={(e) => setSSeason(e.target.value as "FALL" | "SPRING" | "SUMMER")}>
+              <select
+                className="rounded-lg border bg-background px-3 py-2 text-sm"
+                value={sSeason}
+                onChange={(e) => setSSeason(e.target.value as "FALL" | "SPRING" | "SUMMER")}
+              >
                 <option value="FALL">الخريف (FALL)</option>
                 <option value="SPRING">الربيع (SPRING)</option>
                 <option value="SUMMER">الصيفي (SUMMER)</option>
               </select>
-              <Input value={sNameAr} onChange={(e) => setSNameAr(e.target.value)} placeholder="الفصل الأول" required />
+              <Input
+                value={sNameAr}
+                onChange={(e) => setSNameAr(e.target.value)}
+                placeholder="الفصل الأول"
+                required
+              />
             </div>
             <label className="flex items-center gap-2 text-xs text-muted-foreground">
-              <input type="checkbox" checked={sCurrent} onChange={(e) => setSCurrent(e.target.checked)} />
+              <input
+                type="checkbox"
+                checked={sCurrent}
+                onChange={(e) => setSCurrent(e.target.checked)}
+              />
               تعيين كفصل دراسي حالي
             </label>
             <Button size="sm" variant="outline" type="submit">
               <Plus className="h-4 w-4" /> حفظ الفصل الدراسي
             </Button>
           </form>
+
+          {(years.length > 0 || semesters.length > 0) && (
+            <div className="mt-5 space-y-2 border-t pt-4 text-xs">
+              {years.length > 0 && (
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-semibold text-muted-foreground">الأعوام:</span>
+                  {years.map((y) => (
+                    <button
+                      key={y.id}
+                      type="button"
+                      onClick={async () => {
+                        if (y.is_current) return;
+                        try {
+                          await adminUpsertAcademicYear({
+                            data: { id: y.id, name: y.name, is_current: true },
+                          });
+                          await refresh();
+                          toast.success(`تم تعيين ${y.name} كعام حالي`);
+                        } catch (err) {
+                          toast.error(err instanceof Error ? err.message : "تعذر التحديث");
+                        }
+                      }}
+                      className={`rounded-full px-2.5 py-0.5 font-mono transition ${
+                        y.is_current
+                          ? "bg-success-soft font-semibold text-success"
+                          : "border hover:bg-muted"
+                      }`}
+                    >
+                      {y.name} {y.is_current ? "✓ الحالي" : ""}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {semesters.length > 0 && (
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-semibold text-muted-foreground">الفصول:</span>
+                  {semesters.map((s) => (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={async () => {
+                        if (s.is_current) return;
+                        try {
+                          await adminUpsertSemester({
+                            data: {
+                              id: s.id,
+                              academic_year_id: s.academic_year_id,
+                              season: s.season as "FALL" | "SPRING" | "SUMMER",
+                              name_ar: s.name_ar,
+                              is_current: true,
+                              is_closed: s.is_closed,
+                            },
+                          });
+                          await refresh();
+                          toast.success(`تم تعيين ${s.name_ar} كفصل حالي`);
+                        } catch (err) {
+                          toast.error(err instanceof Error ? err.message : "تعذر التحديث");
+                        }
+                      }}
+                      className={`rounded-full px-2.5 py-0.5 transition ${
+                        s.is_current
+                          ? "bg-success-soft font-semibold text-success"
+                          : "border hover:bg-muted"
+                      }`}
+                    >
+                      {s.name_ar} {s.is_current ? "✓ الحالي" : ""}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </Card>
       </div>
 
@@ -240,7 +387,9 @@ function AdminAcademicPage() {
             onSubmit={async (e) => {
               e.preventDefault();
               try {
-                await adminUpsertCourse({ data: { code: cCode, name: cName, credit_hours: Number(cHours), is_active: true } });
+                await adminUpsertCourse({
+                  data: { code: cCode, name: cName, credit_hours: Number(cHours), is_active: true },
+                });
                 setCCode("");
                 setCName("");
                 await refresh();
@@ -251,9 +400,30 @@ function AdminAcademicPage() {
             }}
           >
             <div className="text-xs font-semibold text-muted-foreground">1. إضافة مقرر دراسي</div>
-            <Input value={cCode} onChange={(e) => setCCode(e.target.value)} dir="ltr" placeholder="CSE121" required />
-            <Input value={cName} onChange={(e) => setCName(e.target.value)} dir="ltr" placeholder="Computer Programming" required />
-            <Input value={cHours} onChange={(e) => setCHours(e.target.value)} type="number" min="1" max="12" dir="ltr" placeholder="الساعات المعتمدة" required />
+            <Input
+              value={cCode}
+              onChange={(e) => setCCode(e.target.value)}
+              dir="ltr"
+              placeholder="CSE121"
+              required
+            />
+            <Input
+              value={cName}
+              onChange={(e) => setCName(e.target.value)}
+              dir="ltr"
+              placeholder="Computer Programming"
+              required
+            />
+            <Input
+              value={cHours}
+              onChange={(e) => setCHours(e.target.value)}
+              type="number"
+              min="1"
+              max="12"
+              dir="ltr"
+              placeholder="الساعات المعتمدة"
+              required
+            />
             <Button size="sm" variant="brand" type="submit">
               <Plus className="h-4 w-4" /> إضافة مقرر
             </Button>
@@ -265,7 +435,12 @@ function AdminAcademicPage() {
               e.preventDefault();
               try {
                 await adminUpsertOffering({
-                  data: { course_id: oCourseId, semester_id: oSemesterId, program_id: oProgramId || null, is_active: true },
+                  data: {
+                    course_id: oCourseId,
+                    semester_id: oSemesterId,
+                    program_id: oProgramId || null,
+                    is_active: true,
+                  },
                 });
                 await refresh();
                 toast.success("تم طرح المقرر في الفصل");
@@ -275,7 +450,12 @@ function AdminAcademicPage() {
             }}
           >
             <div className="text-xs font-semibold text-muted-foreground">2. طرح مقرر في فصل</div>
-            <select className="w-full rounded-lg border bg-background px-3 py-2 text-sm" value={oCourseId} onChange={(e) => setOCourseId(e.target.value)} required>
+            <select
+              className="w-full rounded-lg border bg-background px-3 py-2 text-sm"
+              value={oCourseId}
+              onChange={(e) => setOCourseId(e.target.value)}
+              required
+            >
               <option value="">اختر المقرر</option>
               {courses.map((c) => (
                 <option key={c.id} value={c.id}>
@@ -283,7 +463,12 @@ function AdminAcademicPage() {
                 </option>
               ))}
             </select>
-            <select className="w-full rounded-lg border bg-background px-3 py-2 text-sm" value={oSemesterId} onChange={(e) => setOSemesterId(e.target.value)} required>
+            <select
+              className="w-full rounded-lg border bg-background px-3 py-2 text-sm"
+              value={oSemesterId}
+              onChange={(e) => setOSemesterId(e.target.value)}
+              required
+            >
               <option value="">اختر الفصل الدراسي</option>
               {semesters.map((s) => (
                 <option key={s.id} value={s.id}>
@@ -291,7 +476,11 @@ function AdminAcademicPage() {
                 </option>
               ))}
             </select>
-            <select className="w-full rounded-lg border bg-background px-3 py-2 text-sm" value={oProgramId} onChange={(e) => setOProgramId(e.target.value)}>
+            <select
+              className="w-full rounded-lg border bg-background px-3 py-2 text-sm"
+              value={oProgramId}
+              onChange={(e) => setOProgramId(e.target.value)}
+            >
               <option value="">كل البرامج (اختياري)</option>
               {programs.map((pr) => (
                 <option key={pr.id} value={pr.id}>
@@ -309,7 +498,9 @@ function AdminAcademicPage() {
             onSubmit={async (e) => {
               e.preventDefault();
               try {
-                await adminUpsertGroup({ data: { offering_id: gOfferingId, name: gName, instructor: gInstructor } });
+                await adminUpsertGroup({
+                  data: { offering_id: gOfferingId, name: gName, instructor: gInstructor },
+                });
                 setGName("");
                 setGInstructor("");
                 await refresh();
@@ -319,8 +510,15 @@ function AdminAcademicPage() {
               }
             }}
           >
-            <div className="text-xs font-semibold text-muted-foreground">3. إضافة مجموعة / سكشن لطرح مقرر</div>
-            <select className="w-full rounded-lg border bg-background px-3 py-2 text-sm" value={gOfferingId} onChange={(e) => setGOfferingId(e.target.value)} required>
+            <div className="text-xs font-semibold text-muted-foreground">
+              3. إضافة مجموعة / سكشن لطرح مقرر
+            </div>
+            <select
+              className="w-full rounded-lg border bg-background px-3 py-2 text-sm"
+              value={gOfferingId}
+              onChange={(e) => setGOfferingId(e.target.value)}
+              required
+            >
               <option value="">اختر طرح المقرر</option>
               {offerings.map((o) => {
                 const crs = courseMap.get(o.course_id);
@@ -332,8 +530,19 @@ function AdminAcademicPage() {
                 );
               })}
             </select>
-            <Input value={gName} onChange={(e) => setGName(e.target.value)} dir="ltr" placeholder="Group 1 - Section 1" required />
-            <Input value={gInstructor} onChange={(e) => setGInstructor(e.target.value)} dir="ltr" placeholder="المحاضر" />
+            <Input
+              value={gName}
+              onChange={(e) => setGName(e.target.value)}
+              dir="ltr"
+              placeholder="Group 1 - Section 1"
+              required
+            />
+            <Input
+              value={gInstructor}
+              onChange={(e) => setGInstructor(e.target.value)}
+              dir="ltr"
+              placeholder="المحاضر"
+            />
             <Button size="sm" variant="brand" type="submit">
               <Plus className="h-4 w-4" /> إضافة المجموعة
             </Button>
@@ -367,7 +576,12 @@ function AdminAcademicPage() {
             }
           }}
         >
-          <select className="rounded-lg border bg-background px-3 py-2 text-sm" value={lecGroupId} onChange={(e) => setLecGroupId(e.target.value)} required>
+          <select
+            className="rounded-lg border bg-background px-3 py-2 text-sm"
+            value={lecGroupId}
+            onChange={(e) => setLecGroupId(e.target.value)}
+            required
+          >
             <option value="">اختر المجموعة</option>
             {groups.map((g) => {
               const off = offeringMap.get(g.offering_id);
@@ -380,7 +594,11 @@ function AdminAcademicPage() {
               );
             })}
           </select>
-          <select className="rounded-lg border bg-background px-3 py-2 text-sm" value={lecDay} onChange={(e) => setLecDay(e.target.value as typeof lecDay)}>
+          <select
+            className="rounded-lg border bg-background px-3 py-2 text-sm"
+            value={lecDay}
+            onChange={(e) => setLecDay(e.target.value as typeof lecDay)}
+          >
             {DAYS.map(([en, ar]) => (
               <option key={en} value={en}>
                 {ar}
@@ -388,18 +606,49 @@ function AdminAcademicPage() {
             ))}
           </select>
           <div className="grid grid-cols-2 gap-2">
-            <Input value={lecStart} onChange={(e) => setLecStart(e.target.value)} type="time" step="300" aria-label="وقت البدء" dir="ltr" required />
-            <Input value={lecEnd} onChange={(e) => setLecEnd(e.target.value)} type="time" step="300" aria-label="وقت الانتهاء" dir="ltr" required />
+            <Input
+              value={lecStart}
+              onChange={(e) => setLecStart(e.target.value)}
+              type="time"
+              step="300"
+              aria-label="وقت البدء"
+              dir="ltr"
+              required
+            />
+            <Input
+              value={lecEnd}
+              onChange={(e) => setLecEnd(e.target.value)}
+              type="time"
+              step="300"
+              aria-label="وقت الانتهاء"
+              dir="ltr"
+              required
+            />
           </div>
-          <select className="rounded-lg border bg-background px-3 py-2 text-sm" value={lecKind} onChange={(e) => setLecKind(e.target.value as SlotKind)}>
+          <select
+            className="rounded-lg border bg-background px-3 py-2 text-sm"
+            value={lecKind}
+            onChange={(e) => setLecKind(e.target.value as SlotKind)}
+          >
             {(Object.keys(KIND_LABEL) as SlotKind[]).map((k) => (
               <option key={k} value={k}>
                 {KIND_LABEL[k]}
               </option>
             ))}
           </select>
-          <Input value={lecLocation} onChange={(e) => setLecLocation(e.target.value)} dir="ltr" placeholder="القاعة / المعمل (Hall 1)" required />
-          <Input value={lecInstructor} onChange={(e) => setLecInstructor(e.target.value)} dir="ltr" placeholder="المحاضر (اختياري)" />
+          <Input
+            value={lecLocation}
+            onChange={(e) => setLecLocation(e.target.value)}
+            dir="ltr"
+            placeholder="القاعة / المعمل (Hall 1)"
+            required
+          />
+          <Input
+            value={lecInstructor}
+            onChange={(e) => setLecInstructor(e.target.value)}
+            dir="ltr"
+            placeholder="المحاضر (اختياري)"
+          />
           <Button variant="brand" type="submit">
             <Plus className="h-4 w-4" /> إضافة للجدول
           </Button>
@@ -414,12 +663,17 @@ function AdminAcademicPage() {
               const off = grp ? offeringMap.get(grp.offering_id) : undefined;
               const crs = off ? courseMap.get(off.course_id) : undefined;
               return (
-                <div key={lec.id} className="flex flex-wrap items-center justify-between gap-2 py-2.5">
+                <div
+                  key={lec.id}
+                  className="flex flex-wrap items-center justify-between gap-2 py-2.5"
+                >
                   <div>
                     <span className="font-medium">{crs ? `${crs.code} — ${crs.name}` : ""}</span>
                     <span className="mx-2 text-xs text-muted-foreground">
-                      ({grp?.name}) · {DAYS.find((d) => d[0] === lec.day_of_week)?.[1]} · {formatTimeDisplay(lec.start_time, lec.start_hour)}–
-                      {formatTimeDisplay(lec.end_time, lec.end_hour)} · {KIND_LABEL[lec.kind]} · {lec.location}
+                      ({grp?.name}) · {DAYS.find((d) => d[0] === lec.day_of_week)?.[1]} ·{" "}
+                      {formatTimeDisplay(lec.start_time, lec.start_hour)}–
+                      {formatTimeDisplay(lec.end_time, lec.end_hour)} · {KIND_LABEL[lec.kind]} ·{" "}
+                      {lec.location}
                     </span>
                   </div>
                   <Button

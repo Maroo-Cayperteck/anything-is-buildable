@@ -17,16 +17,29 @@ function normalizeHost(rawUrl: string | undefined): string | null {
   }
 }
 
+function readVitePublicEnv(
+  key: "VITE_SUPABASE_URL" | "VITE_SUPABASE_PUBLISHABLE_KEY",
+): string | undefined {
+  const fromProcess = process.env[key]?.trim();
+  if (fromProcess) return fromProcess;
+  try {
+    const metaEnv = import.meta.env as Record<string, string | undefined> | undefined;
+    return metaEnv?.[key]?.trim() || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export function validateServerSupabaseConfig(options?: { requireServiceRole?: boolean }) {
-  // Lovable / Cloudflare Workers injects env vars as VITE_* at build time.
-  // Fall back to VITE_* names so the server function works in all environments.
-  const url = (process.env["SUPABASE_URL"] || process.env["VITE_SUPABASE_URL"])?.trim();
+  const url = (
+    process.env["SUPABASE_URL"]?.trim() || readVitePublicEnv("VITE_SUPABASE_URL")
+  )?.trim();
   const publishableKey = (
-    process.env["SUPABASE_PUBLISHABLE_KEY"] || process.env["VITE_SUPABASE_PUBLISHABLE_KEY"]
+    process.env["SUPABASE_PUBLISHABLE_KEY"]?.trim() ||
+    readVitePublicEnv("VITE_SUPABASE_PUBLISHABLE_KEY")
   )?.trim();
-  const serviceRoleKey = (
-    process.env["SUPABASE_SERVICE_ROLE_KEY"] || process.env["VITE_SUPABASE_SERVICE_ROLE_KEY"]
-  )?.trim();
+  // Service-role secret MUST remain server-only (never read from VITE_ variables).
+  const serviceRoleKey = process.env["SUPABASE_SERVICE_ROLE_KEY"]?.trim();
 
   const missing: string[] = [];
   if (!url) missing.push("SUPABASE_URL");
@@ -41,7 +54,7 @@ export function validateServerSupabaseConfig(options?: { requireServiceRole?: bo
     );
   }
 
-  const clientUrl = process.env["VITE_SUPABASE_URL"]?.trim();
+  const clientUrl = readVitePublicEnv("VITE_SUPABASE_URL");
   const serverHost = normalizeHost(url);
   const clientHost = normalizeHost(clientUrl);
   if (serverHost && clientHost && serverHost !== clientHost) {
@@ -84,7 +97,9 @@ export function assertAuthRateLimit(bucketKey: string, maxAttempts = 12, windowM
     return;
   }
   if (current.count >= maxAttempts) {
-    throw new Error("RATE_LIMIT: تم تجاوز عدد محاولات تسجيل الدخول المسموح بها؛ يرجى المحاولة بعد دقيقة.");
+    throw new Error(
+      "RATE_LIMIT: تم تجاوز عدد محاولات تسجيل الدخول المسموح بها؛ يرجى المحاولة بعد دقيقة.",
+    );
   }
   current.count += 1;
 }

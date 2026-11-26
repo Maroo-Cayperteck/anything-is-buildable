@@ -1,7 +1,12 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { normalizeEmail, normalizeStudentCode, normalizeTimeString, parseTimeToMinutes } from "./auth-helpers";
+import {
+  normalizeEmail,
+  normalizeStudentCode,
+  normalizeTimeString,
+  parseTimeToMinutes,
+} from "./auth-helpers";
 
 const audienceSchema = z.enum(["all", "program", "level", "student"]);
 
@@ -36,9 +41,14 @@ export const getAdminOverview = createServerFn({ method: "GET" })
       { count: totalStudents, error: e1 },
       { count: activeStudents, error: e2 },
       { count: pendingRegistrations, error: e3 },
-      { count: publishedDocuments, error: e4 },
-      { count: upcomingEvents, error: e5 },
-      { data: recentLogs, error: e6 },
+      { count: suspendedStudents, error: e4 },
+      { count: programsCount, error: e5 },
+      { count: activeSemestersCount, error: e6 },
+      { count: coursesCount, error: e7 },
+      { count: offeringsCount, error: e8 },
+      { count: publishedDocuments, error: e9 },
+      { count: upcomingEvents, error: e10 },
+      { data: recentLogs, error: e11 },
     ] = await Promise.all([
       supabaseAdmin.from("student_profiles").select("*", { count: "exact", head: true }),
       supabaseAdmin
@@ -49,6 +59,17 @@ export const getAdminOverview = createServerFn({ method: "GET" })
         .from("registration_requests")
         .select("*", { count: "exact", head: true })
         .eq("status", "pending"),
+      supabaseAdmin
+        .from("student_profiles")
+        .select("*", { count: "exact", head: true })
+        .eq("account_status", "suspended"),
+      supabaseAdmin.from("academic_programs").select("*", { count: "exact", head: true }),
+      supabaseAdmin
+        .from("semesters")
+        .select("*", { count: "exact", head: true })
+        .eq("is_current", true),
+      supabaseAdmin.from("courses").select("*", { count: "exact", head: true }),
+      supabaseAdmin.from("course_offerings").select("*", { count: "exact", head: true }),
       supabaseAdmin
         .from("documents")
         .select("*", { count: "exact", head: true })
@@ -65,7 +86,7 @@ export const getAdminOverview = createServerFn({ method: "GET" })
         .limit(15),
     ]);
 
-    if (e1 || e2 || e3 || e4 || e5 || e6) {
+    if (e1 || e2 || e3 || e4 || e5 || e6 || e7 || e8 || e9 || e10 || e11) {
       throw new Error("تعذر تحميل إحصائيات لوحة التحكم");
     }
 
@@ -74,6 +95,11 @@ export const getAdminOverview = createServerFn({ method: "GET" })
         totalStudents: totalStudents ?? 0,
         activeStudents: activeStudents ?? 0,
         pendingRegistrations: pendingRegistrations ?? 0,
+        suspendedStudents: suspendedStudents ?? 0,
+        programsCount: programsCount ?? 0,
+        activeSemestersCount: activeSemestersCount ?? 0,
+        coursesCount: coursesCount ?? 0,
+        offeringsCount: offeringsCount ?? 0,
         publishedDocuments: publishedDocuments ?? 0,
         upcomingEvents: upcomingEvents ?? 0,
       },
@@ -89,7 +115,11 @@ export const listRosterAndRequests = createServerFn({ method: "GET" })
     await requireAdminServer(context.userId);
 
     const [{ data: roster, error: rErr }, { data: requests, error: qErr }] = await Promise.all([
-      supabaseAdmin.from("student_roster").select("*").order("created_at", { ascending: false }).limit(200),
+      supabaseAdmin
+        .from("student_roster")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(200),
       supabaseAdmin
         .from("registration_requests")
         .select("*")
@@ -133,11 +163,19 @@ export const adminUpsertRosterEntry = createServerFn({ method: "POST" })
     };
 
     const res = data.id
-      ? await supabaseAdmin.from("student_roster").update(payload).eq("id", data.id).select("*").single()
+      ? await supabaseAdmin
+          .from("student_roster")
+          .update(payload)
+          .eq("id", data.id)
+          .select("*")
+          .single()
       : await supabaseAdmin.from("student_roster").insert(payload).select("*").single();
 
     if (res.error || !res.data) {
-      throw new Error(res.error?.message || "تعذر حفظ بيانات الطالب المؤهل (تأكد من عدم تكرار الرقم الجامعي أو البريد)");
+      throw new Error(
+        res.error?.message ||
+          "تعذر حفظ بيانات الطالب المؤهل (تأكد من عدم تكرار الرقم الجامعي أو البريد)",
+      );
     }
 
     await logAdminActivity({
@@ -150,6 +188,82 @@ export const adminUpsertRosterEntry = createServerFn({ method: "POST" })
     });
 
     return res.data;
+  });
+
+export const adminBulkImportRoster = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        rows: z
+          .array(
+            z.object({
+              student_code: z.string().trim().min(2).max(40),
+              approved_email: z.string().trim().email().max(160),
+              full_name_ar: z.string().trim().max(160).optional().default(""),
+              full_name_en: z.string().trim().max(160).optional().default(""),
+              program_id: z.string().uuid().nullable().optional().default(null),
+              level_id: z.string().uuid().nullable().optional().default(null),
+            }),
+          )
+          .min(1, "يرجى إدخال سجل واحد على الأقل للاستيراد")
+          .max(500, "الحد الأقصى للاستيراد في الدفعة الواحدة 500 طالب"),
+      })
+      .parse(d),
+  )
+  .handler(async ({ context, data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { logAdminActivity, requireAdminServer } = await import("./auth.server");
+    const admin = await requireAdminServer(context.userId);
+
+    const seenCodes = new Set<string>();
+    const seenEmails = new Set<string>();
+    const normalizedRows = [];
+
+    for (let i = 0; i < data.rows.length; i++) {
+      const row = data.rows[i]!;
+      const code = normalizeStudentCode(row.student_code);
+      const email = normalizeEmail(row.approved_email);
+      if (seenCodes.has(code)) {
+        throw new Error(`الرقم الجامعي مكرر داخل الملف في الصف ${i + 1}: ${code}`);
+      }
+      if (seenEmails.has(email)) {
+        throw new Error(`البريد الإلكتروني مكرر داخل الملف في الصف ${i + 1}: ${email}`);
+      }
+      seenCodes.add(code);
+      seenEmails.add(email);
+      await assertProgramLevelMatch(row.program_id, row.level_id);
+      normalizedRows.push({
+        student_code: code,
+        approved_email: email,
+        full_name_ar: row.full_name_ar || null,
+        full_name_en: row.full_name_en || null,
+        program_id: row.program_id ?? null,
+        level_id: row.level_id ?? null,
+        is_active: true,
+      });
+    }
+
+    const { data: inserted, error } = await supabaseAdmin
+      .from("student_roster")
+      .upsert(normalizedRows, { onConflict: "student_code" })
+      .select("id");
+
+    if (error) {
+      throw new Error(
+        error.message || "تعذر استيراد كشف الطلاب (تأكد من عدم تعارض البريد الإلكتروني)",
+      );
+    }
+
+    await logAdminActivity({
+      actorUserId: admin.userId,
+      actorLabel: admin.actorLabel,
+      action: "bulk_import_roster",
+      entityType: "student_roster",
+      metadata: { imported_count: inserted?.length ?? normalizedRows.length },
+    });
+
+    return { importedCount: inserted?.length ?? normalizedRows.length };
   });
 
 export const adminDeleteRosterEntry = createServerFn({ method: "POST" })
@@ -212,7 +326,9 @@ export const adminApproveRegistration = createServerFn({ method: "POST" })
 export const adminRejectRegistration = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) =>
-    z.object({ requestId: z.string().uuid(), reason: z.string().trim().max(500).optional() }).parse(d),
+    z
+      .object({ requestId: z.string().uuid(), reason: z.string().trim().max(500).optional() })
+      .parse(d),
   )
   .handler(async ({ context, data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -237,6 +353,7 @@ const listStudentsSchema = z.object({
   search: z.string().trim().max(120).optional().default(""),
   programId: z.string().uuid().optional().or(z.literal("")),
   levelId: z.string().uuid().optional().or(z.literal("")),
+  academicYearId: z.string().uuid().optional().or(z.literal("")),
   status: z.enum(["pending", "active", "rejected", "suspended"]).optional().or(z.literal("")),
   page: z.number().int().min(1).optional().default(1),
   pageSize: z.number().int().min(5).max(200).optional().default(20),
@@ -253,6 +370,7 @@ export const listAdminStudents = createServerFn({ method: "GET" })
     let query = supabaseAdmin.from("student_profiles").select("*", { count: "exact" });
     if (data.programId) query = query.eq("program_id", data.programId);
     if (data.levelId) query = query.eq("level_id", data.levelId);
+    if (data.academicYearId) query = query.eq("academic_year_id", data.academicYearId);
     if (data.status) query = query.eq("account_status", data.status);
     if (data.search) {
       const safe = data.search.replace(/[,%()]/g, " ").trim();
@@ -265,9 +383,11 @@ export const listAdminStudents = createServerFn({ method: "GET" })
 
     const from = (data.page - 1) * data.pageSize;
     const to = from + data.pageSize - 1;
-    const { data: items, count, error } = await query
-      .order("created_at", { ascending: false })
-      .range(from, to);
+    const {
+      data: items,
+      count,
+      error,
+    } = await query.order("created_at", { ascending: false }).range(from, to);
 
     if (error) throw new Error("تعذر تحميل قائمة الطلاب");
 
@@ -310,10 +430,7 @@ export const getAdminStudentDetail = createServerFn({ method: "GET" })
         .select("*")
         .eq("student_user_id", data.userId)
         .order("created_at", { ascending: false }),
-      supabaseAdmin
-        .from("semester_grade_summaries")
-        .select("*")
-        .eq("student_user_id", data.userId),
+      supabaseAdmin.from("semester_grade_summaries").select("*").eq("student_user_id", data.userId),
     ]);
 
     if (pErr || docErr || enrErr || gradeErr || sumErr) {
@@ -438,11 +555,13 @@ export const adminUpdateStudentProfile = createServerFn({ method: "POST" })
 export const adminSetStudentAccountStatus = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) =>
-    z.object({
-      userId: z.string().uuid(),
-      status: z.enum(["active", "suspended", "pending", "rejected"]),
-      reason: z.string().trim().max(500).optional(),
-    }).parse(d),
+    z
+      .object({
+        userId: z.string().uuid(),
+        status: z.enum(["active", "suspended", "pending", "rejected"]),
+        reason: z.string().trim().max(500).optional(),
+      })
+      .parse(d),
   )
   .handler(async ({ context, data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -509,14 +628,16 @@ export const getAcademicCatalog = createServerFn({ method: "GET" })
 export const adminUpsertProgram = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) =>
-    z.object({
-      id: z.string().uuid().optional(),
-      code: z.string().trim().min(1).max(30),
-      name_ar: z.string().trim().min(2).max(160),
-      name_en: z.string().trim().max(160).optional(),
-      faculty: z.string().trim().max(160).optional(),
-      is_active: z.boolean().optional().default(true),
-    }).parse(d),
+    z
+      .object({
+        id: z.string().uuid().optional(),
+        code: z.string().trim().min(1).max(30),
+        name_ar: z.string().trim().min(2).max(160),
+        name_en: z.string().trim().max(160).optional(),
+        faculty: z.string().trim().max(160).optional(),
+        is_active: z.boolean().optional().default(true),
+      })
+      .parse(d),
   )
   .handler(async ({ context, data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -531,7 +652,12 @@ export const adminUpsertProgram = createServerFn({ method: "POST" })
       is_active: data.is_active,
     };
     const res = data.id
-      ? await supabaseAdmin.from("academic_programs").update(payload).eq("id", data.id).select("*").single()
+      ? await supabaseAdmin
+          .from("academic_programs")
+          .update(payload)
+          .eq("id", data.id)
+          .select("*")
+          .single()
       : await supabaseAdmin.from("academic_programs").insert(payload).select("*").single();
     if (res.error || !res.data) throw new Error(res.error?.message || "تعذر حفظ البرنامج");
 
@@ -549,12 +675,14 @@ export const adminUpsertProgram = createServerFn({ method: "POST" })
 export const adminUpsertLevel = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) =>
-    z.object({
-      id: z.string().uuid().optional(),
-      program_id: z.string().uuid(),
-      level_number: z.number().int().min(1).max(10),
-      name_ar: z.string().trim().min(2).max(120),
-    }).parse(d),
+    z
+      .object({
+        id: z.string().uuid().optional(),
+        program_id: z.string().uuid(),
+        level_number: z.number().int().min(1).max(10),
+        name_ar: z.string().trim().min(2).max(120),
+      })
+      .parse(d),
   )
   .handler(async ({ context, data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -568,7 +696,12 @@ export const adminUpsertLevel = createServerFn({ method: "POST" })
       sort_order: data.level_number,
     };
     const res = data.id
-      ? await supabaseAdmin.from("academic_levels").update(payload).eq("id", data.id).select("*").single()
+      ? await supabaseAdmin
+          .from("academic_levels")
+          .update(payload)
+          .eq("id", data.id)
+          .select("*")
+          .single()
       : await supabaseAdmin.from("academic_levels").insert(payload).select("*").single();
     if (res.error || !res.data) throw new Error(res.error?.message || "تعذر حفظ المستوى الأكاديمي");
 
@@ -585,7 +718,13 @@ export const adminUpsertLevel = createServerFn({ method: "POST" })
 export const adminUpsertAcademicYear = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) =>
-    z.object({ id: z.string().uuid().optional(), name: z.string().trim().min(4).max(40), is_current: z.boolean().default(false) }).parse(d),
+    z
+      .object({
+        id: z.string().uuid().optional(),
+        name: z.string().trim().min(4).max(40),
+        is_current: z.boolean().default(false),
+      })
+      .parse(d),
   )
   .handler(async ({ context, data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -606,14 +745,16 @@ export const adminUpsertAcademicYear = createServerFn({ method: "POST" })
 export const adminUpsertSemester = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) =>
-    z.object({
-      id: z.string().uuid().optional(),
-      academic_year_id: z.string().uuid(),
-      season: z.enum(["FALL", "SPRING", "SUMMER"]),
-      name_ar: z.string().trim().min(2).max(120),
-      is_current: z.boolean().default(false),
-      is_closed: z.boolean().default(false),
-    }).parse(d),
+    z
+      .object({
+        id: z.string().uuid().optional(),
+        academic_year_id: z.string().uuid(),
+        season: z.enum(["FALL", "SPRING", "SUMMER"]),
+        name_ar: z.string().trim().min(2).max(120),
+        is_current: z.boolean().default(false),
+        is_closed: z.boolean().default(false),
+      })
+      .parse(d),
   )
   .handler(async ({ context, data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -637,14 +778,16 @@ export const adminUpsertSemester = createServerFn({ method: "POST" })
 export const adminUpsertCourse = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) =>
-    z.object({
-      id: z.string().uuid().optional(),
-      code: z.string().trim().min(2).max(30),
-      name: z.string().trim().min(2).max(160),
-      name_ar: z.string().trim().max(160).optional(),
-      credit_hours: z.number().int().min(1).max(12),
-      is_active: z.boolean().default(true),
-    }).parse(d),
+    z
+      .object({
+        id: z.string().uuid().optional(),
+        code: z.string().trim().min(2).max(30),
+        name: z.string().trim().min(2).max(160),
+        name_ar: z.string().trim().max(160).optional(),
+        credit_hours: z.number().int().min(1).max(12),
+        is_active: z.boolean().default(true),
+      })
+      .parse(d),
   )
   .handler(async ({ context, data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -677,14 +820,16 @@ export const adminUpsertCourse = createServerFn({ method: "POST" })
 export const adminUpsertOffering = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) =>
-    z.object({
-      id: z.string().uuid().optional(),
-      course_id: z.string().uuid(),
-      semester_id: z.string().uuid(),
-      program_id: z.string().uuid().nullable().optional().default(null),
-      level_id: z.string().uuid().nullable().optional().default(null),
-      is_active: z.boolean().default(true),
-    }).parse(d),
+    z
+      .object({
+        id: z.string().uuid().optional(),
+        course_id: z.string().uuid(),
+        semester_id: z.string().uuid(),
+        program_id: z.string().uuid().nullable().optional().default(null),
+        level_id: z.string().uuid().nullable().optional().default(null),
+        is_active: z.boolean().default(true),
+      })
+      .parse(d),
   )
   .handler(async ({ context, data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -701,7 +846,12 @@ export const adminUpsertOffering = createServerFn({ method: "POST" })
       is_active: data.is_active,
     };
     const res = data.id
-      ? await supabaseAdmin.from("course_offerings").update(payload).eq("id", data.id).select("*").single()
+      ? await supabaseAdmin
+          .from("course_offerings")
+          .update(payload)
+          .eq("id", data.id)
+          .select("*")
+          .single()
       : await supabaseAdmin.from("course_offerings").insert(payload).select("*").single();
     if (res.error || !res.data) throw new Error(res.error?.message || "تعذر حفظ طرح المقرر");
 
@@ -718,13 +868,15 @@ export const adminUpsertOffering = createServerFn({ method: "POST" })
 export const adminUpsertGroup = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) =>
-    z.object({
-      id: z.string().uuid().optional(),
-      offering_id: z.string().uuid(),
-      name: z.string().trim().min(1).max(100),
-      instructor: z.string().trim().max(160).optional(),
-      capacity: z.number().int().positive().nullable().optional().default(null),
-    }).parse(d),
+    z
+      .object({
+        id: z.string().uuid().optional(),
+        offering_id: z.string().uuid(),
+        name: z.string().trim().min(1).max(100),
+        instructor: z.string().trim().max(160).optional(),
+        capacity: z.number().int().positive().nullable().optional().default(null),
+      })
+      .parse(d),
   )
   .handler(async ({ context, data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -738,7 +890,12 @@ export const adminUpsertGroup = createServerFn({ method: "POST" })
       capacity: data.capacity,
     };
     const res = data.id
-      ? await supabaseAdmin.from("academic_groups").update(payload).eq("id", data.id).select("*").single()
+      ? await supabaseAdmin
+          .from("academic_groups")
+          .update(payload)
+          .eq("id", data.id)
+          .select("*")
+          .single()
       : await supabaseAdmin.from("academic_groups").insert(payload).select("*").single();
     if (res.error || !res.data) throw new Error(res.error?.message || "تعذر حفظ المجموعة/السكشن");
 
@@ -755,22 +912,40 @@ export const adminUpsertGroup = createServerFn({ method: "POST" })
 export const adminEnrollStudent = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) =>
-    z.object({
-      student_user_id: z.string().uuid(),
-      offering_id: z.string().uuid(),
-      group_id: z.string().uuid(),
-      status: z.enum(["enrolled", "dropped", "completed"]).default("enrolled"),
-    }).parse(d),
+    z
+      .object({
+        student_user_id: z.string().uuid(),
+        offering_id: z.string().uuid(),
+        group_id: z.string().uuid(),
+        status: z.enum(["enrolled", "dropped", "completed"]).default("enrolled"),
+      })
+      .parse(d),
   )
   .handler(async ({ context, data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { logAdminActivity, requireAdminServer } = await import("./auth.server");
     const admin = await requireAdminServer(context.userId);
 
-    const [{ data: grp, error: grpErr }, { data: off, error: offErr }, { data: stu, error: stuErr }] = await Promise.all([
-      supabaseAdmin.from("academic_groups").select("id, offering_id").eq("id", data.group_id).maybeSingle(),
-      supabaseAdmin.from("course_offerings").select("id, program_id, level_id").eq("id", data.offering_id).maybeSingle(),
-      supabaseAdmin.from("student_profiles").select("user_id, program_id, level_id").eq("user_id", data.student_user_id).maybeSingle(),
+    const [
+      { data: grp, error: grpErr },
+      { data: off, error: offErr },
+      { data: stu, error: stuErr },
+    ] = await Promise.all([
+      supabaseAdmin
+        .from("academic_groups")
+        .select("id, offering_id")
+        .eq("id", data.group_id)
+        .maybeSingle(),
+      supabaseAdmin
+        .from("course_offerings")
+        .select("id, program_id, level_id")
+        .eq("id", data.offering_id)
+        .maybeSingle(),
+      supabaseAdmin
+        .from("student_profiles")
+        .select("user_id, program_id, level_id")
+        .eq("user_id", data.student_user_id)
+        .maybeSingle(),
     ]);
     if (grpErr || offErr || stuErr) {
       throw new Error("تعذر التحقق من بيانات الطرح والمجموعة والطالب");
@@ -802,7 +977,9 @@ export const adminEnrollStudent = createServerFn({ method: "POST" })
 
     if (activeExisting) {
       if (activeExisting.group_id !== data.group_id) {
-        throw new Error("الطالب لديه تسجيل قائم بالفعل في مجموعة أخرى لهذا المقرر؛ قم بإسقاط التسجيل السابق أولًا للحفاظ على السجل التاريخي");
+        throw new Error(
+          "الطالب لديه تسجيل قائم بالفعل في مجموعة أخرى لهذا المقرر؛ قم بإسقاط التسجيل السابق أولًا للحفاظ على السجل التاريخي",
+        );
       }
       if (activeExisting.status === data.status) {
         throw new Error("الطالب مسجل بالفعل في هذه المجموعة لنفس المقرر");
@@ -827,7 +1004,8 @@ export const adminEnrollStudent = createServerFn({ method: "POST" })
           .select("*")
           .single();
 
-    if (res.error || !res.data) throw new Error(res.error?.message || "تعذر تسجيل الطالب في المجموعة");
+    if (res.error || !res.data)
+      throw new Error(res.error?.message || "تعذر تسجيل الطالب في المجموعة");
 
     await logAdminActivity({
       actorUserId: admin.userId,
@@ -835,7 +1013,11 @@ export const adminEnrollStudent = createServerFn({ method: "POST" })
       action: "enroll_student",
       entityType: "enrollments",
       entityId: res.data.id,
-      metadata: { student_user_id: data.student_user_id, group_id: data.group_id, status: res.data.status },
+      metadata: {
+        student_user_id: data.student_user_id,
+        group_id: data.group_id,
+        status: res.data.status,
+      },
     });
     return res.data;
   });
@@ -843,7 +1025,9 @@ export const adminEnrollStudent = createServerFn({ method: "POST" })
 export const adminUpdateEnrollmentStatus = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) =>
-    z.object({ id: z.string().uuid(), status: z.enum(["enrolled", "dropped", "completed"]) }).parse(d),
+    z
+      .object({ id: z.string().uuid(), status: z.enum(["enrolled", "dropped", "completed"]) })
+      .parse(d),
   )
   .handler(async ({ context, data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -988,16 +1172,18 @@ export const adminDeleteLecture = createServerFn({ method: "POST" })
 export const adminUpsertStudentGrade = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) =>
-    z.object({
-      student_user_id: z.string().uuid(),
-      semester_id: z.string().uuid(),
-      course_id: z.string().uuid(),
-      marks: z.number().min(0).max(100).nullable(),
-      grade_letter: z.string().trim().max(6).nullable(),
-      grade_points: z.number().min(0).max(4).nullable(),
-      status_label: z.string().trim().min(1).max(40).default("ناجح"),
-      is_published: z.boolean().default(false),
-    }).parse(d),
+    z
+      .object({
+        student_user_id: z.string().uuid(),
+        semester_id: z.string().uuid(),
+        course_id: z.string().uuid(),
+        marks: z.number().min(0).max(100).nullable(),
+        grade_letter: z.string().trim().max(6).nullable(),
+        grade_points: z.number().min(0).max(4).nullable(),
+        status_label: z.string().trim().min(1).max(40).default("ناجح"),
+        is_published: z.boolean().default(false),
+      })
+      .parse(d),
   )
   .handler(async ({ context, data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -1057,6 +1243,78 @@ export const adminDeleteStudentGrade = createServerFn({ method: "POST" })
     return { ok: true as const };
   });
 
+export const adminUpsertSemesterGradeSummary = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        student_user_id: z.string().uuid(),
+        semester_id: z.string().uuid(),
+        semester_gpa: z.number().min(0).max(4).nullable(),
+        is_published: z.boolean().default(false),
+      })
+      .parse(d),
+  )
+  .handler(async ({ context, data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { logAdminActivity, requireAdminServer } = await import("./auth.server");
+    const admin = await requireAdminServer(context.userId);
+
+    const { data: saved, error } = await supabaseAdmin
+      .from("semester_grade_summaries")
+      .upsert(
+        {
+          student_user_id: data.student_user_id,
+          semester_id: data.semester_id,
+          semester_gpa: data.semester_gpa,
+          is_published: data.is_published,
+        },
+        { onConflict: "student_user_id,semester_id" },
+      )
+      .select("*")
+      .single();
+
+    if (error || !saved) throw new Error(error?.message || "تعذر حفظ ملخص المعدل الفصلي");
+
+    await logAdminActivity({
+      actorUserId: admin.userId,
+      actorLabel: admin.actorLabel,
+      action: "upsert_semester_summary",
+      entityType: "semester_grade_summaries",
+      entityId: saved.id,
+      metadata: {
+        student_user_id: data.student_user_id,
+        semester_id: data.semester_id,
+        is_published: data.is_published,
+      },
+    });
+    return saved;
+  });
+
+export const adminDeleteSemesterGradeSummary = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) => z.object({ id: z.string().uuid() }).parse(d))
+  .handler(async ({ context, data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { logAdminActivity, requireAdminServer } = await import("./auth.server");
+    const admin = await requireAdminServer(context.userId);
+
+    const { error } = await supabaseAdmin
+      .from("semester_grade_summaries")
+      .delete()
+      .eq("id", data.id);
+    if (error) throw new Error("تعذر حذف ملخص الفصل الدراسي");
+
+    await logAdminActivity({
+      actorUserId: admin.userId,
+      actorLabel: admin.actorLabel,
+      action: "delete_semester_summary",
+      entityType: "semester_grade_summaries",
+      entityId: data.id,
+    });
+    return { ok: true as const };
+  });
+
 export const listAdminCommunications = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
@@ -1076,17 +1334,19 @@ export const listAdminCommunications = createServerFn({ method: "GET" })
 export const adminUpsertAnnouncement = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) =>
-    z.object({
-      id: z.string().uuid().optional(),
-      title: z.string().trim().min(2).max(200),
-      body: z.string().trim().min(2).max(4000),
-      audience_scope: audienceSchema.default("all"),
-      program_id: z.string().uuid().nullable().optional().default(null),
-      level_id: z.string().uuid().nullable().optional().default(null),
-      target_student_user_id: z.string().uuid().nullable().optional().default(null),
-      is_published: z.boolean().default(false),
-      is_archived: z.boolean().default(false),
-    }).parse(d),
+    z
+      .object({
+        id: z.string().uuid().optional(),
+        title: z.string().trim().min(2).max(200),
+        body: z.string().trim().min(2).max(4000),
+        audience_scope: audienceSchema.default("all"),
+        program_id: z.string().uuid().nullable().optional().default(null),
+        level_id: z.string().uuid().nullable().optional().default(null),
+        target_student_user_id: z.string().uuid().nullable().optional().default(null),
+        is_published: z.boolean().default(false),
+        is_archived: z.boolean().default(false),
+      })
+      .parse(d),
   )
   .handler(async ({ context, data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -1101,14 +1361,20 @@ export const adminUpsertAnnouncement = createServerFn({ method: "POST" })
       audience_scope: data.audience_scope,
       program_id: data.audience_scope === "program" ? data.program_id : null,
       level_id: data.audience_scope === "level" ? data.level_id : null,
-      target_student_user_id: data.audience_scope === "student" ? data.target_student_user_id : null,
+      target_student_user_id:
+        data.audience_scope === "student" ? data.target_student_user_id : null,
       is_published: data.is_published,
       is_archived: data.is_archived,
       published_at: data.is_published ? new Date().toISOString() : null,
       created_by: admin.userId,
     };
     const res = data.id
-      ? await supabaseAdmin.from("announcements").update(payload).eq("id", data.id).select("*").single()
+      ? await supabaseAdmin
+          .from("announcements")
+          .update(payload)
+          .eq("id", data.id)
+          .select("*")
+          .single()
       : await supabaseAdmin.from("announcements").insert(payload).select("*").single();
     if (res.error || !res.data) throw new Error(res.error?.message || "تعذر حفظ الإعلان");
 
@@ -1146,22 +1412,24 @@ export const adminDeleteAnnouncement = createServerFn({ method: "POST" })
 export const adminUpsertAcademicEvent = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) =>
-    z.object({
-      id: z.string().uuid().optional(),
-      title: z.string().trim().min(2).max(200),
-      description: z.string().trim().max(2000).optional(),
-      event_type: z.enum(["exam", "deadline", "academic", "announcement"]).default("academic"),
-      starts_at: z.string().min(4),
-      ends_at: z.string().nullable().optional().default(null),
-      location: z.string().trim().max(200).optional(),
-      semester_id: z.string().uuid().nullable().optional().default(null),
-      offering_id: z.string().uuid().nullable().optional().default(null),
-      audience_scope: audienceSchema.default("all"),
-      program_id: z.string().uuid().nullable().optional().default(null),
-      level_id: z.string().uuid().nullable().optional().default(null),
-      target_student_user_id: z.string().uuid().nullable().optional().default(null),
-      is_published: z.boolean().default(false),
-    }).parse(d),
+    z
+      .object({
+        id: z.string().uuid().optional(),
+        title: z.string().trim().min(2).max(200),
+        description: z.string().trim().max(2000).optional(),
+        event_type: z.enum(["exam", "deadline", "academic", "announcement"]).default("academic"),
+        starts_at: z.string().min(4),
+        ends_at: z.string().nullable().optional().default(null),
+        location: z.string().trim().max(200).optional(),
+        semester_id: z.string().uuid().nullable().optional().default(null),
+        offering_id: z.string().uuid().nullable().optional().default(null),
+        audience_scope: audienceSchema.default("all"),
+        program_id: z.string().uuid().nullable().optional().default(null),
+        level_id: z.string().uuid().nullable().optional().default(null),
+        target_student_user_id: z.string().uuid().nullable().optional().default(null),
+        is_published: z.boolean().default(false),
+      })
+      .parse(d),
   )
   .handler(async ({ context, data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -1182,12 +1450,18 @@ export const adminUpsertAcademicEvent = createServerFn({ method: "POST" })
       audience_scope: data.audience_scope,
       program_id: data.audience_scope === "program" ? data.program_id : null,
       level_id: data.audience_scope === "level" ? data.level_id : null,
-      target_student_user_id: data.audience_scope === "student" ? data.target_student_user_id : null,
+      target_student_user_id:
+        data.audience_scope === "student" ? data.target_student_user_id : null,
       is_published: data.is_published,
       created_by: admin.userId,
     };
     const res = data.id
-      ? await supabaseAdmin.from("academic_events").update(payload).eq("id", data.id).select("*").single()
+      ? await supabaseAdmin
+          .from("academic_events")
+          .update(payload)
+          .eq("id", data.id)
+          .select("*")
+          .single()
       : await supabaseAdmin.from("academic_events").insert(payload).select("*").single();
     if (res.error || !res.data) throw new Error(res.error?.message || "تعذر حفظ الفعالية");
 
@@ -1225,7 +1499,12 @@ export const adminDeleteAcademicEvent = createServerFn({ method: "POST" })
 export const listAdminActivityLogs = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: unknown) =>
-    z.object({ page: z.number().int().min(1).default(1), pageSize: z.number().int().min(10).max(100).default(30) }).parse(d ?? {}),
+    z
+      .object({
+        page: z.number().int().min(1).default(1),
+        pageSize: z.number().int().min(10).max(100).default(30),
+      })
+      .parse(d ?? {}),
   )
   .handler(async ({ context, data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
@@ -1234,7 +1513,11 @@ export const listAdminActivityLogs = createServerFn({ method: "GET" })
 
     const from = (data.page - 1) * data.pageSize;
     const to = from + data.pageSize - 1;
-    const { data: logs, count, error } = await supabaseAdmin
+    const {
+      data: logs,
+      count,
+      error,
+    } = await supabaseAdmin
       .from("admin_activity_logs")
       .select("*", { count: "exact" })
       .order("created_at", { ascending: false })

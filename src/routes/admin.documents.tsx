@@ -2,13 +2,29 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { ArrowDown, ArrowUp, Eye, FileText, Loader2, Plus, Save, Trash2, Upload } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  Eye,
+  FileText,
+  Loader2,
+  Plus,
+  Save,
+  Trash2,
+  Upload,
+} from "lucide-react";
 import { Card } from "@/components/portal/Shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -41,13 +57,20 @@ export const Route = createFileRoute("/admin/documents")({
 function DocumentManager() {
   const qc = useQueryClient();
   const { data, isLoading, isError } = useQuery(documentsQuery);
-  const catalog = useQuery({ queryKey: ["admin-academic-catalog"], queryFn: () => getAcademicCatalog() });
+  const catalog = useQuery({
+    queryKey: ["admin-academic-catalog"],
+    queryFn: () => getAcademicCatalog(),
+  });
   const students = useQuery({
     queryKey: ["admin-students-picker"],
     queryFn: () => listAdminStudents({ data: { page: 1, pageSize: 100 } }),
   });
 
-  const [preview, setPreview] = useState<{ title: string; url: string; onPublish?: () => Promise<void> } | null>(null);
+  const [preview, setPreview] = useState<{
+    title: string;
+    url: string;
+    onPublish?: () => Promise<void>;
+  } | null>(null);
   const [publishing, setPublishing] = useState(false);
   const [adding, setAdding] = useState(false);
   const [reordering, setReordering] = useState(false);
@@ -103,10 +126,14 @@ function DocumentManager() {
     if (!toDelete) return;
     setDeleting(true);
     try {
-      await deleteDocumentRecord(toDelete);
+      const res = await deleteDocumentRecord(toDelete);
       setToDelete(null);
       await refresh();
-      toast.success("تم حذف الملف بنجاح");
+      if (res?.storageCleanupQueued) {
+        toast.warning("تم حذف سجل الملف من القاعدة وجدولة تنظيف ملف التخزين مؤقتًا");
+      } else {
+        toast.success("تم حذف الملف بنجاح");
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "تعذر حذف الملف");
     } finally {
@@ -180,7 +207,8 @@ function DocumentManager() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-center gap-3">
         <p className="text-sm text-muted-foreground">
-          تُرفع الملفات إلى التخزين السحابي المركزي وتُحفظ في قاعدة البيانات مباشرة للطلاب المصرح لهم.
+          تُرفع الملفات إلى التخزين السحابي المركزي وتُحفظ في قاعدة البيانات مباشرة للطلاب المصرح
+          لهم.
         </p>
         <Button variant="brand" className="mr-auto" disabled={adding} onClick={addDoc}>
           {adding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus />} إضافة تصنيف ملف
@@ -250,7 +278,9 @@ function DocumentManager() {
         <AlertDialogContent dir="rtl">
           <AlertDialogHeader>
             <AlertDialogTitle>حذف «{toDelete?.title}»؟</AlertDialogTitle>
-            <AlertDialogDescription>سيتم حذف التصنيف والملف المرفوع من قاعدة البيانات ووحدة التخزين نهائيًا.</AlertDialogDescription>
+            <AlertDialogDescription>
+              سيتم حذف التصنيف والملف المرفوع من قاعدة البيانات ووحدة التخزين نهائيًا.
+            </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="gap-2">
             <AlertDialogCancel disabled={deleting}>إلغاء</AlertDialogCancel>
@@ -307,7 +337,9 @@ function DocRow({
   const [levelId, setLevelId] = useState<string>(doc.level_id ?? "");
   const [targetStudentId, setTargetStudentId] = useState<string>(doc.target_student_user_id ?? "");
   const [offeringId, setOfferingId] = useState<string>(doc.offering_id ?? "");
-  const [category, setCategory] = useState<DocCategory>((doc.doc_category as DocCategory) || "general");
+  const [category, setCategory] = useState<DocCategory>(
+    (doc.doc_category as DocCategory) || "general",
+  );
   const [saving, setSaving] = useState(false);
   const [toggling, setToggling] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -394,16 +426,34 @@ function DocRow({
     <Card>
       <div className="flex flex-col gap-5 lg:flex-row">
         <div className="flex gap-1 lg:flex-col">
-          <Button size="icon" variant="ghost" aria-label="تحريك لأعلى" disabled={first} onClick={() => onMove(-1)}>
+          <Button
+            size="icon"
+            variant="ghost"
+            aria-label="تحريك لأعلى"
+            disabled={first}
+            onClick={() => onMove(-1)}
+          >
             <ArrowUp />
           </Button>
-          <Button size="icon" variant="ghost" aria-label="تحريك لأسفل" disabled={last} onClick={() => onMove(1)}>
+          <Button
+            size="icon"
+            variant="ghost"
+            aria-label="تحريك لأسفل"
+            disabled={last}
+            onClick={() => onMove(1)}
+          >
             <ArrowDown />
           </Button>
         </div>
 
         <div className="flex-1 space-y-3">
-          <Input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={200} className="font-semibold" aria-label="عنوان الملف" />
+          <Input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            maxLength={200}
+            className="font-semibold"
+            aria-label="عنوان الملف"
+          />
           <Textarea
             value={desc}
             onChange={(e) => setDesc(e.target.value)}
@@ -449,7 +499,9 @@ function DocRow({
 
             {audience === "level" && (
               <div>
-                <label className="mb-1 block text-xs text-muted-foreground">المستوى الأكاديمي</label>
+                <label className="mb-1 block text-xs text-muted-foreground">
+                  المستوى الأكاديمي
+                </label>
                 <select
                   className="w-full rounded-lg border bg-background px-3 py-2 text-sm"
                   value={levelId}
@@ -499,7 +551,9 @@ function DocRow({
             </div>
 
             <div>
-              <label className="mb-1 block text-xs text-muted-foreground">مرتبط بمقرر (اختياري)</label>
+              <label className="mb-1 block text-xs text-muted-foreground">
+                مرتبط بمقرر (اختياري)
+              </label>
               <select
                 className="w-full rounded-lg border bg-background px-3 py-2 text-sm"
                 value={offeringId}
@@ -557,7 +611,11 @@ function DocRow({
           <Button variant="brand" disabled={!dirty || saving} onClick={save}>
             {saving ? <Loader2 className="animate-spin" /> : <Save />} حفظ
           </Button>
-          <Button variant="ghost" className="text-destructive hover:text-destructive" onClick={onDelete}>
+          <Button
+            variant="ghost"
+            className="text-destructive hover:text-destructive"
+            onClick={onDelete}
+          >
             <Trash2 /> حذف
           </Button>
         </div>

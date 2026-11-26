@@ -12,7 +12,7 @@ export const Route = createFileRoute("/admin/logs")({
 
 function AdminLogsPage() {
   const [page, setPage] = useState(1);
-  const { data, isLoading, isError } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["admin-logs", page],
     queryFn: () => listAdminActivityLogs({ data: { page, pageSize: 30 } }),
   });
@@ -26,7 +26,14 @@ function AdminLogsPage() {
   }
 
   if (isError || !data) {
-    return <div className="rounded-xl border bg-card p-8 text-center text-destructive">تعذر تحميل سجل النشاط.</div>;
+    return (
+      <div className="space-y-4 rounded-xl border bg-card p-8 text-center">
+        <p className="text-destructive">تعذر تحميل سجل النشاط.</p>
+        <Button variant="outline" onClick={() => refetch()}>
+          إعادة المحاولة
+        </Button>
+      </div>
+    );
   }
 
   const totalPages = Math.max(1, Math.ceil(data.total / data.pageSize));
@@ -68,13 +75,23 @@ function AdminLogsPage() {
 
       {totalPages > 1 && (
         <div className="mt-6 flex items-center justify-center gap-3">
-          <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={page <= 1}
+            onClick={() => setPage((p) => p - 1)}
+          >
             السابق
           </Button>
           <span className="text-xs text-muted-foreground">
             صفحة {page} من {totalPages}
           </span>
-          <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={page >= totalPages}
+            onClick={() => setPage((p) => p + 1)}
+          >
             التالي
           </Button>
         </div>

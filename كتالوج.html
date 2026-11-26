@@ -1,0 +1,898 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>كتالوج بوابة جامعة حلوان الأهلية — الدليل الشامل والنشر على Supabase و Vercel</title>
+  <style>
+    :root {
+      --bg: #f4f6fa;
+      --card: #ffffff;
+      --ink: #17233a;
+      --muted: #55647d;
+      --primary: #1e3a5f;
+      --primary-2: #2f5e97;
+      --gold: #c9972c;
+      --gold-soft: #fdf6e6;
+      --border: #dfe6f0;
+      --ok-bg: #ebf9f0;
+      --ok-ink: #176b3b;
+      --warn-bg: #fff6e6;
+      --warn-ink: #925400;
+      --danger-bg: #fdeeee;
+      --danger-ink: #a51d24;
+      --code-bg: #0f172a;
+      --code-ink: #e2e8f0;
+      --shadow: 0 10px 30px -15px rgba(23, 35, 58, 0.16);
+      --radius: 14px;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      font-family: "IBM Plex Sans Arabic", "Segoe UI", Tahoma, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+      line-height: 1.75;
+    }
+
+    a { color: var(--primary-2); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    code, pre {
+      font-family: "JetBrains Mono", Consolas, monospace;
+      direction: ltr;
+      unicode-bidi: isolate;
+    }
+    code {
+      background: #e9eef7;
+      color: #163056;
+      padding: 0.12rem 0.45rem;
+      border-radius: 6px;
+      font-size: 0.88em;
+    }
+    pre {
+      background: var(--code-bg);
+      color: var(--code-ink);
+      padding: 1rem 1.15rem;
+      border-radius: 10px;
+      overflow-x: auto;
+      font-size: 0.86rem;
+      line-height: 1.55;
+      margin: 0.85rem 0;
+      text-align: left;
+    }
+
+    .layout {
+      display: flex;
+      min-height: 100vh;
+    }
+
+    .sidebar {
+      width: 290px;
+      flex-shrink: 0;
+      background: linear-gradient(180deg, #172b47 0%, #1e3a5f 100%);
+      color: #eef3fb;
+      padding: 1.5rem 1.1rem;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.8rem;
+      padding-bottom: 1.1rem;
+      border-bottom: 1px solid rgba(255,255,255,0.14);
+      margin-bottom: 1rem;
+    }
+    .brand-badge {
+      width: 46px;
+      height: 46px;
+      border-radius: 12px;
+      background: rgba(255,255,255,0.12);
+      border: 1px solid rgba(201,151,44,0.55);
+      display: grid;
+      place-items: center;
+      font-weight: 800;
+      color: #fff;
+      letter-spacing: 0.5px;
+    }
+    .brand h1 { font-size: 1rem; margin: 0; line-height: 1.3; }
+    .brand p { font-size: 0.76rem; margin: 0.15rem 0 0; color: #b7c6de; }
+
+    .toc-search {
+      width: 100%;
+      padding: 0.55rem 0.75rem;
+      border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.2);
+      background: rgba(255,255,255,0.08);
+      color: #fff;
+      font-family: inherit;
+      font-size: 0.85rem;
+      margin-bottom: 0.9rem;
+    }
+    .toc-search::placeholder { color: #b7c6de; }
+
+    .nav-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 0.25rem; }
+    .nav-list a {
+      display: block;
+      padding: 0.45rem 0.7rem;
+      border-radius: 8px;
+      color: #d6e1f2;
+      font-size: 0.86rem;
+      transition: background 0.15s;
+    }
+    .nav-list a:hover {
+      background: rgba(255,255,255,0.12);
+      color: #fff;
+      text-decoration: none;
+    }
+
+    main {
+      flex: 1;
+      min-width: 0;
+      padding: 2rem clamp(1rem, 3vw, 2.75rem) 4rem;
+      max-width: 1120px;
+      margin: 0 auto;
+    }
+
+    .hero {
+      background: linear-gradient(120deg, #162a47 0%, #244b7a 60%, #2f5e97 100%);
+      color: #fff;
+      border-radius: 18px;
+      padding: 2rem clamp(1.25rem, 3vw, 2.4rem);
+      box-shadow: var(--shadow);
+      margin-bottom: 1.75rem;
+    }
+    .hero h2 { margin: 0 0 0.5rem; font-size: clamp(1.45rem, 2.4vw, 2rem); }
+    .hero p { margin: 0; color: #dce7f7; max-width: 780px; }
+    .hero-meta {
+      margin-top: 1.15rem;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.6rem;
+    }
+    .pill {
+      display: inline-block;
+      padding: 0.22rem 0.75rem;
+      border-radius: 999px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      background: rgba(255,255,255,0.14);
+      color: #fff;
+    }
+    .pill.gold { background: rgba(201,151,44,0.25); border: 1px solid rgba(255,220,130,0.45); }
+
+    section.card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.5rem 1.65rem;
+      margin-bottom: 1.4rem;
+      box-shadow: var(--shadow);
+    }
+    section.card h2 {
+      margin: 0 0 0.9rem;
+      font-size: 1.28rem;
+      color: var(--primary);
+      border-bottom: 2px solid var(--bg);
+      padding-bottom: 0.5rem;
+    }
+    section.card h3 {
+      margin: 1.15rem 0 0.45rem;
+      font-size: 1.04rem;
+      color: var(--primary-2);
+    }
+
+    .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; }
+    .grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.9rem; }
+    .mini-box {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 0.95rem 1.05rem;
+      background: #fbfcfe;
+    }
+    .mini-box strong { display: block; color: var(--primary); margin-bottom: 0.25rem; }
+
+    .callout {
+      padding: 0.9rem 1.1rem;
+      border-radius: 10px;
+      margin: 0.85rem 0;
+      font-size: 0.93rem;
+    }
+    .callout.ok { background: var(--ok-bg); color: var(--ok-ink); border-right: 4px solid var(--ok-ink); }
+    .callout.warn { background: var(--warn-bg); color: var(--warn-ink); border-right: 4px solid var(--gold); }
+    .callout.danger { background: var(--danger-bg); color: var(--danger-ink); border-right: 4px solid var(--danger-ink); }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 0.85rem 0;
+      font-size: 0.9rem;
+    }
+    th, td {
+      border: 1px solid var(--border);
+      padding: 0.6rem 0.75rem;
+      text-align: right;
+      vertical-align: top;
+    }
+    th { background: #eff3f9; color: var(--primary); font-weight: 700; }
+    tr:nth-child(even) td { background: #fafbfd; }
+
+    .tag {
+      display: inline-block;
+      padding: 0.12rem 0.55rem;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-weight: 700;
+    }
+    .tag-ok { background: var(--ok-bg); color: var(--ok-ink); }
+    .tag-warn { background: var(--warn-bg); color: var(--warn-ink); }
+    .tag-secret { background: var(--danger-bg); color: var(--danger-ink); }
+
+    .mobile-toc-btn {
+      display: none;
+      position: fixed;
+      bottom: 1rem;
+      left: 1rem;
+      z-index: 50;
+      background: var(--primary);
+      color: #fff;
+      border: none;
+      border-radius: 999px;
+      padding: 0.65rem 1.1rem;
+      font-family: inherit;
+      font-weight: 700;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.25);
+      cursor: pointer;
+    }
+
+    @media (max-width: 960px) {
+      .layout { display: block; }
+      .sidebar {
+        position: fixed;
+        inset-block: 0;
+        right: 0;
+        z-index: 60;
+        transform: translateX(105%);
+        transition: transform 0.25s ease;
+      }
+      .sidebar.open { transform: translateX(0); }
+      .mobile-toc-btn { display: inline-block; }
+    }
+  </style>
+</head>
+<body>
+  <button class="mobile-toc-btn" onclick="document.querySelector('.sidebar').classList.toggle('open')">
+    فهرس الكتالوج ☰
+  </button>
+
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-badge">HNU</div>
+        <div>
+          <h1>كتالوج بوابة الطالب</h1>
+          <p>جامعة حلوان الأهلية — الدليل المرجعي</p>
+        </div>
+      </div>
+
+      <input
+        type="search"
+        class="toc-search"
+        placeholder="ابحث داخل الأقسام..."
+        oninput="filterSections(this.value)"
+      />
+
+      <ul class="nav-list">
+        <li><a href="#sec-1">1. نظرة عامة على النظام وأهدافه</a></li>
+        <li><a href="#sec-2">2. الأدوار والصلاحيات</a></li>
+        <li><a href="#sec-3">3. تسجيل الطلاب والدخول (بدون بريد جامعي)</a></li>
+        <li><a href="#sec-4">4. دورة اعتماد المسؤول للطلبات</a></li>
+        <li><a href="#sec-5">5. دليل بوابة الطالب (صفحة بصفحة)</a></li>
+        <li><a href="#sec-6">6. دليل لوحة تحكم المسؤول (صفحة بصفحة)</a></li>
+        <li><a href="#sec-7">7. كيف تنعكس تعديلات المسؤول على الطالب؟</a></li>
+        <li><a href="#sec-8">8. إدارة الملفات، الاستهداف، والخصوصية</a></li>
+        <li><a href="#sec-9">9. نموذج البيانات والعلاقات (ERD)</a></li>
+        <li><a href="#sec-10">10. البنية التقنية والملفات</a></li>
+        <li><a href="#sec-11">11. التشغيل المحلي (Local Dev)</a></li>
+        <li><a href="#sec-12">12. إعداد Supabase وتطبيق الترحيلات</a></li>
+        <li><a href="#sec-13">13. النشر على Vercel + ربط Supabase</a></li>
+        <li><a href="#sec-14">14. قائمة التحقق والاختبار الشامل</a></li>
+        <li><a href="#sec-15">15. استكشاف الأخطاء وحلولها</a></li>
+        <li><a href="#sec-16">16. الأمان، النسخ الاحتياطي، والتراجع</a></li>
+        <li><a href="#sec-17">17. القيود الحالية والتطويرات المستقبلية</a></li>
+      </ul>
+    </aside>
+
+    <main>
+      <header class="hero">
+        <h2>الكتالوج المرجعي الكامل لبوابة جامعة حلوان الأهلية (HNU Student Portal)</h2>
+        <p>
+          مرجع هندسي وتشغيلي موثّق يصف السلوك الفعلي المُنفّذ في الشفرة البرمجية على فرع
+          <code>restore-working-version</code>، ويشرح آلية المصادقة، وإدارة المسؤول، وعزل بيانات الطلاب،
+          وخطوات الإعداد والنشر على <strong>Supabase</strong> و<strong>Vercel</strong> بدقة.
+        </p>
+        <div class="hero-meta">
+          <span class="pill gold">الفرع المستهدف: restore-working-version</span>
+          <span class="pill">TanStack Start + React 19 + Nitro</span>
+          <span class="pill">Supabase PostgreSQL + Auth + Storage + RLS</span>
+          <span class="pill">التصميم متوافق بالكامل مع RTL</span>
+        </div>
+      </header>
+
+      <!-- 1 -->
+      <section class="card" id="sec-1">
+        <h2>1. نظرة عامة على النظام وأهدافه</h2>
+        <p>
+          <strong>بوابة طلاب جامعة حلوان الأهلية (HNU Student Portal)</strong> هي نظام معلومات طلابي وإداري
+          مركزي يعتمد على مبدأ واضح: <strong>قاعدة البيانات والتخزين السحابي المركزي هما المرجع الوحيد للحقيقة،
+          والمسؤول هو المتحكم الرسمي في البيانات الأكاديمية.</strong>
+        </p>
+        <div class="callout ok">
+          النظام مُدار مركزيًا من إدارة شؤون الطلاب (Admin-managed SIS) ولا يتطلب وجود API خارجي لنظام
+          الجامعة الداخلي ولا يعتمد على محركات ذكاء اصطناعي، بل يتيح للإدارة إدخال البيانات أو استيراد كشوف
+          الطلاب عبر CSV وإدارة الجداول والنتائج والملفات بشكل فوري وآمن.
+        </div>
+        <div class="grid-3">
+          <div class="mini-box">
+            <strong>بوابة الطالب (/portal)</strong>
+            يعرض كل طالب بياناته المعتمدة فقط (ملفه الشخصي، مقرراته المسجلة، جدوله الأسبوعي، نتائجه المنشورة، ملفاته العامة والخاصة، وإعلاناته).
+          </div>
+          <div class="mini-box">
+            <strong>مركز تحكم المسؤول (/admin)</strong>
+            إدارة كاملة لطلبات التسجيل، ملفات الطلاب، الكتالوج الأكاديمي، الجداول بدقة الدقائق، الدرجات ومعدلات الفصول، والملفات والإعلانات وسجل النشاط.
+          </div>
+          <div class="mini-box">
+            <strong>أمان متعدد الطبقات</strong>
+            تحقق JWT على الخادم في كل دالة عبر <code>requireSupabaseAuth</code>، وفصل كامل بين صلاحيات <code>admin</code> و<code>student</code>، وسياسات PostgreSQL RLS.
+          </div>
+        </div>
+      </section>
+
+      <!-- 2 -->
+      <section class="card" id="sec-2">
+        <h2>2. الأدوار والصلاحيات (Student &amp; Admin)</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>الدور</th>
+              <th>الجدول المرجعي للصلاحية</th>
+              <th>ما يمكنه فعله</th>
+              <th>ما يُمنع منه</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>طالب نشط</strong> (<code>student</code> + <code>account_status = 'active'</code>)</td>
+              <td><code>public.user_roles</code> + <code>public.student_profiles</code></td>
+              <td>عرض ملفه، مقرراته، جدوله، نتائجه المنشورة، ملفاته المسموح بها، إعلاناته، وتحديث رقم الهاتف فقط عبر <code>updateOwnContactInfo</code>.</td>
+              <td>تعديل الرقم الجامعي، البرنامج، المستوى، المعدل التراكمي، التسجيل، الدرجات، أو الوصول لبيانات/ملفات طالب آخر أو غير المنشورة.</td>
+            </tr>
+            <tr>
+              <td><strong>طالب معلق / قيد المراجعة / مرفوض</strong></td>
+              <td><code>registration_requests</code> / <code>student_profiles</code></td>
+              <td>التسجيل أو استكمال تأكيد البريد الإلكتروني ورؤية رسالة حالته عند محاولة الدخول.</td>
+              <td>ممنوع تمامًا من دخول أي مسار تحت <code>/portal</code> أو استدعاء دوال البوابة أو روابط الملفات (حتى لو احتفظ بجلسة قديمة).</td>
+            </tr>
+            <tr>
+              <td><strong>مسؤول النظام</strong> (<code>admin</code>)</td>
+              <td><code>public.user_roles</code> + <code>requireAdminServer</code></td>
+              <td>اعتماد/رفض الطلبات، تعديل حسابات الطلاب، إدارة الكتالوج، التسكين والمجموعات، المحاضرات، الدرجات، الملفات، الإعلانات، وسجل النشاط.</td>
+              <td>لا يوجد وصول للواجهة قبل مصادقة Supabase Auth والتحقق من الدور على الخادم في كل طلب.</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- 3 -->
+      <section class="card" id="sec-3">
+        <h2>3. تسجيل الطلاب وتسجيل الدخول (بدون بريد جامعي)</h2>
+        <div class="callout ok">
+          <strong>قاعدة أساسية مُطبقة:</strong> لا يُشترط امتلاك بريد إلكتروني جامعي إطلاقًا. يسجّل الطالب
+          باستخدام <strong>الرقم الجامعي + بريده الإلكتروني الشخصي العادي</strong> (مثل Gmail أو Outlook أو أي مزود
+          صحيح) + كلمة مرور لا تقل عن 8 أحرف. لا يُستخدم أي نطاق بريد إلكتروني وهمي مثل
+          <code>@students.example.com</code>.
+        </div>
+
+        <h3>آلية التسجيل وتأكيد البريد الإلكتروني (Dual Mode)</h3>
+        <ol>
+          <li>في صفحة <code>/register</code>: تُقرأ كلمة المرور كما هي بدون <code>.trim()</code> للحفاظ على المسافات إن وجدت.</li>
+          <li>يُستدعى <code>createRegistrationIntent</code> على الخادم للتحقق من عدم تكرار الرقم الجامعي أو البريد، ومطابقة البريد مع <code>student_roster</code> إن وجد سجل نشط (وإن لم يوجد سجل بالكشف، تُحفظ نية التسجيل وتُعلّم بـ <code>rosterVerified = false</code> للمراجعة اليدوية من المسؤول).</li>
+          <li>يُحفظ الطلب المبدئي في جدول <code>public.registration_intents</code> بصلاحية 48 ساعة.</li>
+          <li>يُنشأ الحساب عبر <code>supabase.auth.signUp</code> مع تحديد <code>emailRedirectTo</code> إلى <code>&lt;origin&gt;/auth/callback</code>.</li>
+          <li>
+            <strong>إذا كان تأكيد البريد مفعّلًا في Supabase:</strong> ينتقل المستخدم لرسالة واضحة توضح حفظ طلبه وأنه عند فتح رابط التفعيل سيكتمل الربط عبر <code>/auth/callback</code> (الذي يبدّل <code>code</code> أو <code>token_hash</code> ثم يستدعي <code>completeRegistrationCallback</code> لإنشاء طلب <code>pending</code> مرة واحدة بشكل Idempotent). وإذا انتهت صلاحية الـ intent تظهر استمارة استرداد آمنة مرتبطة بالبريد المؤكد.
+          </li>
+          <li>
+            <strong>إذا كان تأكيد البريد معطّلًا:</strong> يُستدعى <code>submitRegistrationRequest</code> فورًا لإنشاء طلب <code>pending</code> في <code>registration_requests</code> ثم يُسجّل الخروج تلقائيًا لحين موافقة المسؤول.
+          </li>
+        </ol>
+
+        <h3>آلية تسجيل الدخول (البريد الشخصي أو الرقم الجامعي)</h3>
+        <ul>
+          <li><strong>الدخول بالبريد الإلكتروني:</strong> يستدعي المتصفح <code>supabase.auth.signInWithPassword</code> مباشرة بالبريد المُطبّع وكلمة المرور دون أي تعديل عليها.</li>
+          <li><strong>الدخول بالرقم الجامعي (أو اسم المستخدم):</strong> يستدعي المتصفح الدالة الخادمية <code>signInWithIdentifier</code> التي تبحث عن البريد المعتمد على الخادم (عبر <code>supabaseAdmin</code> عند توفر <code>SUPABASE_SERVICE_ROLE_KEY</code>، أو عبر دالة <code>resolve_login_email</code> كـ fallback خادمي)، ثم تُصادق كلمة المرور عبر عميل Publishable Key غير دائم، وتُعيد فقط رمزي الجلسة (<code>accessToken</code>, <code>refreshToken</code>) دون كشف البريد أو بيانات الكشف للمتصفح غير المصادق.</li>
+          <li>بعد ثبوت الجلسة تُستدعى <code>getAuthAccountStatus</code> للتحقق من الأدوار وحالة الحساب (مع رسائل دقيقة لحالات: تأكيد البريد، قيد المراجعة، مرفوض مع السبب، معلق، أو عدم صلاحية البيانات).</li>
+        </ul>
+      </section>
+
+      <!-- 4 -->
+      <section class="card" id="sec-4">
+        <h2>4. دورة اعتماد المسؤول للطلبات (عمليات ذرية Atomicity)</h2>
+        <p>
+          الاعتماد والرفض وتغيير حالة الحساب لا تُنفّذ كاستعلامات متفرقة قد ينجح بعضها ويفشل الآخر، بل عبر
+          دوال PostgreSQL ذرية (<code>SECURITY DEFINER</code>) في الترحيل <code>0005_migration.sql</code> محصورة الصلاحية في <code>service_role</code> ومحمية بفحص <code>requireAdminServer</code> في الخادم:
+        </p>
+        <ul>
+          <li><code>admin_approve_registration_atomic</code>: يقفل صف الطلب بـ <code>FOR UPDATE</code> لمنع التضارب المتزامن، يتحقق من أن الحالة <code>pending</code>، يطابق البرنامج والمستوى، ينشئ/يحدّث <code>student_profiles</code> بحالة <code>active</code>، يمنح دور <code>student</code> في <code>user_roles</code>، يحدّث <code>registration_requests</code>، ويسجّل العملية في <code>admin_activity_logs</code> في معاملة واحدة.</li>
+          <li><code>admin_reject_registration_atomic</code>: يحدّث حالة الطلب وسبب الرفض وبيانات المراجع، يزيل دور <code>student</code> من <code>user_roles</code>، يحدّث <code>student_profiles.account_status</code> إلى <code>rejected</code>، ويسجّل في سجل النشاط.</li>
+          <li><code>admin_set_account_status_atomic</code>: يبدّل الحالة بين <code>active</code> و<code>suspended</code> و<code>rejected</code> و<code>pending</code> مع مزامنة <code>user_roles</code> و<code>registration_requests</code> وسجل النشاط معًا.</li>
+        </ul>
+      </section>
+
+      <!-- 5 -->
+      <section class="card" id="sec-5">
+        <h2>5. دليل بوابة الطالب (صفحة بصفحة)</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>المسار</th>
+              <th>العنوان</th>
+              <th>المحتوى والسلوك المُنفّذ</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>/</code></td>
+              <td>تسجيل الدخول</td>
+              <td>دخول بالرقم الجامعي أو البريد الشخصي، زر دخول المسؤول، ورابط تفعيل حساب طالب جديد.</td>
+            </tr>
+            <tr>
+              <td><code>/register</code></td>
+              <td>تسجيل حساب جديد</td>
+              <td>الرقم الجامعي، البريد الشخصي، الاسم بالعربية (وبالإنجليزية والهاتف اختياريان)، كلمة المرور وتأكيدها، وتوضيح حالة الكشف.</td>
+            </tr>
+            <tr>
+              <td><code>/auth/callback</code></td>
+              <td>استكمال تأكيد البريد</td>
+              <td>يستقبل رابط التأكيد من Supabase، يستكمل طلب المراجعة تلقائيًا أو عبر نموذج الاسترداد عند انتهاء الـ intent.</td>
+            </tr>
+            <tr>
+              <td><code>/portal</code></td>
+              <td>لوحة التحكم الرئيسية</td>
+              <td>البيانات المختصرة، المعدل التراكمي الرسمي، الساعات المكتسبة، عدد مقررات الفصل الحالي، محاضرات اليوم القادم بتوقيت الدقائق، أحدث الإعلانات والفعاليات، وروابط سريعة.</td>
+            </tr>
+            <tr>
+              <td><code>/portal/info</code></td>
+              <td>بيانات الطالب</td>
+              <td>عرض للقراءة فقط لجميع الحقول الرسمية والأكاديمية وبيانات القيد، مع نموذج تعديل <strong>رقم الهاتف فقط</strong>.</td>
+            </tr>
+            <tr>
+              <td><code>/portal/registration</code></td>
+              <td>التسجيل الأكاديمي والجدول</td>
+              <td>اختيار الفصل الدراسي، عرض المجموعات المسجلة، والجدول الأسبوعي التفاعلي بدقة الدقائق مع توسع تلقائي حسب أبكر/أحدث حصة.</td>
+            </tr>
+            <tr>
+              <td><code>/portal/courses</code></td>
+              <td>المقررات الدراسية</td>
+              <td>جدول المقررات المسجلة في الفصل المختار مع المجموعة/السكشن، المحاضر، المكونات (محاضرة/سكشن/معمل)، والساعات المعتمدة.</td>
+            </tr>
+            <tr>
+              <td><code>/portal/grades</code></td>
+              <td>النتائج والمعدل التراكمي</td>
+              <td>المعدل التراكمي الرسمي، الساعات، سلم التقديرات المرجعي القابل للطي، والدرجات والمعدلات الفصلية <strong>المنشورة فقط</strong> (<code>is_published = true</code>).</td>
+            </tr>
+            <tr>
+              <td><code>/portal/documents</code></td>
+              <td>تحميل ملفات الطالب</td>
+              <td>حالتا تحميل/خطأ/فارغ واضحتان، عرض منفصل لكلٍ من <strong>ملفاتي الخاصة</strong> و<strong>الملفات العامة المستهدفة</strong> عبر <code>getStudentDocumentsBundle</code> (حقل <code>privateDocs</code>).</td>
+            </tr>
+            <tr>
+              <td><code>/portal/viewer/$docId</code></td>
+              <td>معاينة PDF</td>
+              <td>عارض PDF مدمج يستخدم رابطًا موقّتًا قصير العمر من الخادم (<code>getAuthorizedDocumentUrl</code>) وزر تحميل آمن.</td>
+            </tr>
+            <tr>
+              <td><code>/portal/events</code></td>
+              <td>الإعلانات والفعاليات</td>
+              <td>الإعلانات الرسمية والفعاليات والاختبارات المنشورة والمستهدفة للطالب أو برنامجه/مستواه.</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- 6 -->
+      <section class="card" id="sec-6">
+        <h2>6. دليل لوحة تحكم المسؤول (صفحة بصفحة)</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>المسار</th>
+              <th>العنوان</th>
+              <th>الوظائف المُنفّذة</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>/admin-login</code></td>
+              <td>دخول المسؤول</td>
+              <td>مصادقة بريد/اسم مستخدم المسؤول مع التحقق الصارم من وجود دور <code>admin</code> قبل السماح بالانتقال إلى <code>/admin</code>.</td>
+            </tr>
+            <tr>
+              <td><code>/admin</code></td>
+              <td>نظرة عامة</td>
+              <td>إحصائيات مباشرة من PostgreSQL: إجمالي الطلاب، النشطون، المعلقون، الموقوفون، البرامج، الفصول الحالية، المقررات/الطرح، الملفات المنشورة، الفعاليات القادمة، وآخر 15 عملية.</td>
+            </tr>
+            <tr>
+              <td><code>/admin/students</code></td>
+              <td>الطلاب والتسجيل والكشف</td>
+              <td>3 تبويبات: (1) دليل الطلاب مع بحث وتصفية بالبرنامج والمستوى والعام والحالة وصفحات، (2) طلبات التفعيل مع تعيين البرنامج/المستوى واعتماد/رفض ذري، (3) كشف المؤهلين مع إضافة فردية واستيراد CSV بالمعاينة والتحقق من التكرار والأخطاء.</td>
+            </tr>
+            <tr>
+              <td><code>/admin/students/$userId</code></td>
+              <td>ملف الطالب التفصيلي</td>
+              <td>تعديل كافة البيانات الرسمية والأكاديمية والـ CGPA والساعات، تعليق/تفعيل الحساب، التسكين في المقررات والمجموعات مع حفظ السجل المنسحب (<code>dropped</code>)، رفع/معاينة/إخفاء/حذف الملفات الخاصة، وإدارة الدرجات ومعدل الفصل الدراسي (<code>semester_grade_summaries</code>).</td>
+            </tr>
+            <tr>
+              <td><code>/admin/academic</code></td>
+              <td>الشؤون الأكاديمية</td>
+              <td>إدارة البرامج، المستويات المرتبطة، الأعوام الدراسية، الفصول مع التعيين الذري للفصل/العام الحالي، المقررات، طرح المقررات، المجموعات، وجدولة المحاضرات بإدخال <code>HH:MM</code>.</td>
+            </tr>
+            <tr>
+              <td><code>/admin/documents</code></td>
+              <td>إدارة ملفات الطلاب</td>
+              <td>إنشاء تصنيفات ملفات، تحديد الفئة المستهدفة (<code>all</code> / <code>program</code> / <code>level</code> / <code>student</code>)، رفع/استبدال PDF مع معاينة قبل النشر، تبديل الإتاحة، الترتيب، والحذف الآمن.</td>
+            </tr>
+            <tr>
+              <td><code>/admin/events</code></td>
+              <td>الإعلانات والفعاليات</td>
+              <td>إنشاء، نشر/إخفاء/أرشفة، وحذف الإعلانات والفعاليات والاختبارات مع نفس نظام الاستهداف الدقيق.</td>
+            </tr>
+            <tr>
+              <td><code>/admin/logs</code></td>
+              <td>سجل النشاط</td>
+              <td>عرض مُقسّم بصفحات لكل العمليات الحساسة المسجلة في <code>admin_activity_logs</code>.</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- 7 -->
+      <section class="card" id="sec-7">
+        <h2>7. كيف تنعكس تعديلات المسؤول على حساب الطالب؟</h2>
+        <ul>
+          <li>كل تغيير يُجريه المسؤول (اعتماد طالب، تغيير برنامج/مستوى، تسجيل في مجموعة، إضافة محاضرة، نشر درجة أو معدل فصلي، رفع ملف خاص أو عام، نشر إعلان) يُكتب مباشرةً في PostgreSQL و/أو Supabase Storage.</li>
+          <li>بعد نجاح الاستدعاء الخادمي، تُبطل واجهة المسؤول ذاكرة التخزين المؤقت ذات الصلة عبر <code>queryClient.invalidateQueries</code>.</li>
+          <li>في جلسة الطالب (أو من أي جهاز آخر عند التحديث أو انتهاء <code>staleTime = 15s</code>)، تستدعي صفحات الطالب الدالتين <code>getStudentPortalSnapshot</code> و<code>getStudentDocumentsBundle</code> عبر عميل المستخدم (<code>context.supabase</code>) الخاضع لـ RLS، فتظهر البيانات المحدّثة فورًا للطالب المعني فقط.</li>
+        </ul>
+      </section>
+
+      <!-- 8 -->
+      <section class="card" id="sec-8">
+        <h2>8. إدارة الملفات، الاستهداف، والخصوصية</h2>
+        <h3>مسار الرفع والاستبدال المؤمّن (No Fake Success)</h3>
+        <ol>
+          <li><strong>تحقق المتصفح (<code>validatePdfFileClient</code>):</strong> يرفض غير PDF والملفات الفارغة وما يتجاوز 20MB.</li>
+          <li><strong>تهيئة الخادم (<code>adminPreparePdfUpload</code>):</strong> يتحقق من صلاحية المسؤول، ينشئ مسارًا فريدًا بـ UUID (<code>docs/&lt;docId&gt;/&lt;uuid&gt;.pdf</code> للعام أو <code>students/&lt;userId&gt;/&lt;uuid&gt;.pdf</code> للخاص)، ويصدر Signed Upload Token.</li>
+          <li><strong>الرفع المباشر لـ Storage:</strong> يُرفع الملف إلى الحوض الخاص غير العام (<code>student-documents</code> أو <code>private-student-documents</code>).</li>
+          <li><strong>التحقق الخادمي والالتزام بالقاعدة (<code>adminCommitSharedUpload</code> / <code>adminCommitPrivateStudentUpload</code>):</strong> يقرأ الخادم أول البايتات من الكائن المرفوع للتحقق من توقيع <code>%PDF-</code> الحقيقي؛ إذا فشل التوقيع أو فشل الحفظ في PostgreSQL يُحذف الكائن المرفوع فورًا (مع التسجيل في <code>storage_cleanup_queue</code> إن فشل الحذف).</li>
+          <li><strong>الاستبدال:</strong> لا يُحذف الملف القديم إلا <strong>بعد</strong> نجاح رفع الجديد وتحديث قاعدة البيانات بالمسار الجديد.</li>
+          <li><strong>الحذف:</strong> يحذف صف القاعدة ثم يحذف كائن التخزين؛ وإذا تعذر حذف كائن التخزين يُدرج تلقائيًا في <code>public.storage_cleanup_queue</code> ويُنبه المسؤول بدل إخفاء الفشل.</li>
+        </ol>
+        <div class="callout warn">
+          <strong>توحيد العقد والروابط:</strong> تم توحيد اسم حقل الملفات الخاصة في <code>getStudentDocumentsBundle</code> إلى <code>privateDocs</code> في الخادم والواجهة والاختبارات. وتصدر روابط المعاينة والتحميل عبر <code>getAuthorizedDocumentUrl</code> لمدة <strong>180 ثانية</strong> فقط بعد فحص حالة الطالب، وإتاحة الملف (<code>is_available = true</code>)، ومطابقة الجمهور أو الملكية.
+        </div>
+      </section>
+
+      <!-- 9 -->
+      <section class="card" id="sec-9">
+        <h2>9. نموذج البيانات والعلاقات (ERD مبسط)</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>الجدول</th>
+              <th>الدور في المنظومة</th>
+              <th>القيود والحماية الأساسية</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>user_roles</code></td>
+              <td>تخزين الأدوار (<code>admin</code>, <code>student</code>) مرتبط بـ <code>auth.users</code></td>
+              <td>مقيد بـ RLS؛ القراءة لصاحب الحساب أو المسؤول، والكتابة للمسؤول/RPC فقط.</td>
+            </tr>
+            <tr>
+              <td><code>student_roster</code></td>
+              <td>كشف المؤهلين المعتمد (الرقم الجامعي + البريد المعتمد + البرنامج/المستوى الاختياري)</td>
+              <td>محمي بسياسات المسؤول؛ يطابق البرنامج والمستوى عبر Trigger.</td>
+            </tr>
+            <tr>
+              <td><code>registration_intents</code></td>
+              <td>حفظ نية التسجيل لمدة 48 ساعة أثناء تأكيد البريد الإلكتروني</td>
+              <td>محجوب عن <code>anon</code> و<code>authenticated</code>؛ متاح فقط لـ <code>service_role</code>.</td>
+            </tr>
+            <tr>
+              <td><code>registration_requests</code></td>
+              <td>طلبات التفعيل قيد المراجعة / المقبولة / المرفوضة + حقل <code>roster_verified</code></td>
+              <td>يربط <code>auth_user_id</code> بـ <code>student_roster</code> وتتم معالجته ذريًا.</td>
+            </tr>
+            <tr>
+              <td><code>student_profiles</code></td>
+              <td>الملف الرسمي والأكاديمي للطالب (<code>account_status</code>, <code>cgpa</code>, <code>earned_hours</code>)</td>
+              <td>Trigger يضمن تطابق <code>level_id</code> مع <code>program_id</code>؛ التعديل للمسؤول (والطالب يحدّث الهاتف عبر RPC/دالة خادمية مقيدة فقط).</td>
+            </tr>
+            <tr>
+              <td><code>academic_programs</code>, <code>academic_levels</code>, <code>academic_years</code>, <code>semesters</code></td>
+              <td>الهيكل الأكاديمي للجامعة</td>
+              <td>فهارس فريدة للعام/الفصل الحالي (<code>idx_academic_years_single_current</code>, <code>idx_semesters_single_current</code>) + مفتاح مركب للمستوى والبرنامج.</td>
+            </tr>
+            <tr>
+              <td><code>courses</code>, <code>course_offerings</code>, <code>academic_groups</code></td>
+              <td>المقررات وطرحها الفصلي ومجموعاتها/سكاشنها</td>
+              <td>مفتاح فريد مركب <code>(id, offering_id)</code> على <code>academic_groups</code>.</td>
+            </tr>
+            <tr>
+              <td><code>enrollments</code></td>
+              <td>تسجيل الطالب في طرح ومجموعة بحالة (<code>enrolled</code>, <code>dropped</code>, <code>completed</code>)</td>
+              <td>مفتاح أجنبي مركب <code>(group_id, offering_id)</code> + فهرس جزئي <code>idx_enrollments_active_unique</code> يمنع التكرار النشط ويحفظ المنسحب التاريخي.</td>
+            </tr>
+            <tr>
+              <td><code>lectures</code></td>
+              <td>الحصص المجدولة بأعمدة <code>start_time</code> و<code>end_time</code> من نوع <code>TIME</code></td>
+              <td>قيد <code>lectures_time_order_check</code> يمنع تداخل/عكس وقت البدء والانتهاء مع مزامنة الأعمدة القديمة <code>start_hour</code>/<code>end_hour</code>.</td>
+            </tr>
+            <tr>
+              <td><code>student_grades</code>, <code>semester_grade_summaries</code></td>
+              <td>نتائج المقررات والمعدلات الفصلية مع <code>is_published</code></td>
+              <td>لا يرى الطالب عبر RLS سوى صفوفه عندما تكون <code>is_published = true</code>.</td>
+            </tr>
+            <tr>
+              <td><code>documents</code>, <code>student_documents</code>, <code>storage_cleanup_queue</code></td>
+              <td>المستندات العامة المستهدفة، الملفات الخاصة بالطالب، وقائمة التنظيف المؤجل</td>
+              <td>أحواض Storage خاصة (<code>public = false</code>) + سياسات RLS مرتبطة بالأدوار والاستهداف.</td>
+            </tr>
+            <tr>
+              <td><code>announcements</code>, <code>academic_events</code>, <code>admin_activity_logs</code></td>
+              <td>الإعلانات والاختبارات/الفعاليات وسجل الرقابة الإدارية</td>
+              <td>سجل النشاط غير قابل للتعديل من الطلاب، والإعلانات/الفعاليات تصفّى وفق الجمهور.</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- 10 -->
+      <section class="card" id="sec-10">
+        <h2>10. البنية التقنية والملفات الرئيسية</h2>
+        <ul>
+          <li><strong>الواجهة والتوجيه:</strong> React 19 + TanStack Router (ملفات المسارات داخل <code>src/routes/</code>، مع توليد <code>src/routeTree.gen.ts</code> تلقائيًا).</li>
+          <li><strong>إطار الخادم والـ Server Functions:</strong> TanStack Start + Nitro (<code>vite.config.ts</code> يضبط Nitro تلقائيًا على <code>vercel</code> عند البناء في بيئة Vercel عبر <code>process.env.VERCEL</code>).</li>
+          <li><strong>الحالة والاستعلامات:</strong> TanStack Query v5 + Zod للتحقق من المدخلات.</li>
+          <li><strong>الملفات الرئيسية:</strong> <code>src/lib/accounts.functions.ts</code>، <code>src/lib/admin.functions.ts</code>، <code>src/lib/portal.functions.ts</code>، <code>src/lib/documents.functions.ts</code>، <code>src/lib/auth.server.ts</code>، <code>src/lib/session.ts</code>، <code>src/components/portal/Shell.tsx</code>، وملفات الترحيل <code>drizzle/migrations/0000..0006</code>.</li>
+        </ul>
+      </section>
+
+      <!-- 11 -->
+      <section class="card" id="sec-11">
+        <h2>11. التشغيل المحلي (Local Development)</h2>
+        <pre>git checkout restore-working-version
+npm ci
+cp .env.example .env   # ثم املأ قيم مشروع Supabase الفعلي
+npm run dev            # يعمل على http://localhost:8080</pre>
+        <p>أوامر الفحص الهندسي الموجودة في <code>package.json</code>:</p>
+        <pre>npx tsc --noEmit
+npm test
+npm run build</pre>
+      </section>
+
+      <!-- 12 -->
+      <section class="card" id="sec-12">
+        <h2>12. إعداد Supabase وتطبيق الترحيلات (خطوة بخطوة)</h2>
+        <ol>
+          <li>أنشئ مشروعًا جديدًا في <a href="https://supabase.com/dashboard" target="_blank" rel="noopener">Supabase Dashboard</a> واحصل من <strong>Project Settings &rarr; API</strong> على: Project URL، وPublishable/Anon Key، وService Role Key (سري).</li>
+          <li>افتح <strong>SQL Editor</strong> ونفّذ ملفات الترحيل بالترتيب التالي دون تعديل أو تخطي:
+            <pre>1. drizzle/migrations/0000_migration.sql
+2. drizzle/migrations/0001_migration.sql
+3. drizzle/migrations/0002_migration.sql
+4. drizzle/migrations/0003_migration.sql
+5. drizzle/migrations/0004_migration.sql
+6. drizzle/migrations/0005_migration.sql
+7. drizzle/migrations/0006_login_rpc.sql</pre>
+          </li>
+          <li><strong>تحقق من أحواض Storage و RLS:</strong> الترحيل <code>0004_migration.sql</code> ينشئ تلقائيًا <code>student-documents</code> و<code>private-student-documents</code> بوضع غير عام (<code>public = false</code>) ويفعّل سياسات RLS على كل الجداول و<code>storage.objects</code>.</li>
+          <li><strong>إعداد المصادقة (Auth URL Configuration):</strong> من <strong>Authentication &rarr; URL Configuration</strong>:
+            <ul>
+              <li>اضبط <strong>Site URL</strong> على رابط الإنتاج الفعلي في Vercel بعد النشر.</li>
+              <li>أضف في <strong>Redirect URLs</strong> كلًا من <code>http://localhost:8080/auth/callback</code> و<code>https://&lt;your-app&gt;.vercel.app/auth/callback</code> (أو نطاقك المخصص).</li>
+              <li>تأكد أن خيار Personal Email مفتوح (لا قيود domain filter تفرض بريدًا جامعيًا). بالنسبة لتأكيد البريد الإلكتروني: سواء كان <strong>Confirm email</strong> مفعّلًا أو معطّلًا، التدفق مُجهّز للوضعين عبر <code>registration_intents</code> و<code>/auth/callback</code>.</li>
+            </ul>
+          </li>
+          <li><strong>إنشاء أول حساب مسؤول بأمان (Bootstrap Admin):</strong>
+            <ul>
+              <li>من Supabase Dashboard &rarr; <strong>Authentication &rarr; Users &rarr; Add user</strong> أنشئ حساب المسؤول ببريده وكلمة مروره.</li>
+              <li>انسخ الـ <code>UUID</code> الخاص به ثم نفّذ في SQL Editor:
+                <pre>insert into public.user_roles (user_id, role)
+values ('&lt;ADMIN_AUTH_USER_UUID&gt;', 'admin')
+on conflict (user_id, role) do nothing;</pre>
+              </li>
+              <li>(توصية أمان على Vercel عند توفر <code>SUPABASE_SERVICE_ROLE_KEY</code>): بعد التأكد من وضع المفتاح السري في Vercel، يمكنك تنفيذ الأمر التالي لمنع أي استعلام مباشر لدالة البحث من المتصفح:
+                <pre>revoke execute on function public.resolve_login_email(text) from anon, authenticated;</pre>
+              </li>
+            </ul>
+          </li>
+        </ol>
+      </section>
+
+      <!-- 13 -->
+      <section class="card" id="sec-13">
+        <h2>13. النشر الصحيح على Vercel وربطه بـ Supabase</h2>
+        <div class="callout danger">
+          <strong>تحذير مهم بشأن الفرع والمفاتيح:</strong> اختر فرع <code>restore-working-version</code> عند الربط على Vercel (وليس <code>main</code>). ولا تضع <code>SUPABASE_SERVICE_ROLE_KEY</code> في أي متغير يبدأ بـ <code>VITE_</code> أبدًا!
+        </div>
+        <ol>
+          <li>سجّل الدخول إلى Vercel واختر <strong>Add New &rarr; Project</strong> واستورد مستودع GitHub.</li>
+          <li>في إعدادات Git / Production Branch أو Preview Deployments، اختر النشر من فرع <code>restore-working-version</code>.</li>
+          <li>تأكد من إعدادات البناء في Vercel:
+            <ul>
+              <li><strong>Install Command:</strong> <code>npm ci</code></li>
+              <li><strong>Build Command:</strong> <code>npm run build</code> (يفعّل <code>nitro: { preset: "vercel" }</code> تلقائيًا بفضل <code>process.env.VERCEL</code> في <code>vite.config.ts</code>)</li>
+              <li><strong>Node.js Version:</strong> <code>20.x</code> أو <code>22.x</code> (متوافق مع Vite 8 وNitro 3)</li>
+            </ul>
+          </li>
+          <li>أضف <strong>Environment Variables</strong> بالأسماء الدقيقة التي يقرأها الكود الفعلي:
+            <table>
+              <thead>
+                <tr>
+                  <th>اسم المتغير</th>
+                  <th>النوع</th>
+                  <th>ملاحظة الاستخدام</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><code>VITE_SUPABASE_URL</code></td>
+                  <td><span class="tag tag-ok">عام (متصفح وبناء)</span></td>
+                  <td>رابط مشروع Supabase (بدون شرطة مائلة أخيرة).</td>
+                </tr>
+                <tr>
+                  <td><code>VITE_SUPABASE_PUBLISHABLE_KEY</code></td>
+                  <td><span class="tag tag-ok">عام (متصفح وبناء)</span></td>
+                  <td>مفتاح Publishable / Anon للمتصفح.</td>
+                </tr>
+                <tr>
+                  <td><code>SUPABASE_URL</code></td>
+                  <td><span class="tag tag-warn">خادمي</span></td>
+                  <td>نفس رابط مشروع Supabase لـ Server Functions و Middleware.</td>
+                </tr>
+                <tr>
+                  <td><code>SUPABASE_PUBLISHABLE_KEY</code></td>
+                  <td><span class="tag tag-warn">خادمي</span></td>
+                  <td>نفس مفتاح Publishable/Anon للتحقق من JWT وتسجيل الدخول عبر الخادم.</td>
+                </tr>
+                <tr>
+                  <td><code>SUPABASE_SERVICE_ROLE_KEY</code></td>
+                  <td><span class="tag tag-secret">سري (خادم فقط)</span></td>
+                  <td>لا تسبقه بـ <code>VITE_</code> نهائيًا؛ مطلوب لوظائف المسؤول والملفات.</td>
+                </tr>
+              </tbody>
+            </table>
+          </li>
+          <li>انشر نسخة <strong>Preview</strong> أولًا، ثم أضف رابط الـ Preview إلى Supabase Redirect URLs واختبر كامل المسارات قبل ربط النطاق النهائي والانتقال لـ Production.</li>
+        </ol>
+      </section>
+
+      <!-- 14 -->
+      <section class="card" id="sec-14">
+        <h2>14. قائمة التحقق والاختبار العملي (Admin &amp; Student Checklist)</h2>
+        <div class="grid-2">
+          <div class="mini-box">
+            <strong>اختبارات المسؤول</strong>
+            <ul>
+              <li>دخول المسؤول عبر <code>/admin-login</code> ورفض حساب الطالب من دخولها.</li>
+              <li>إضافة برنامج ومستوى وعام وفصل ومقرر وطرح ومجموعة ومحاضرة بدقائق (مثل <code>08:30</code> – <code>10:15</code>).</li>
+              <li>مراجعة طالب مسجل ببريد Gmail/Outlook واعتماد حسابه أو رفضه مع السبب.</li>
+              <li>تجربة استيراد CSV في كشف المؤهلين والتحقق من رفض التكرار.</li>
+              <li>تسكين الطالب في مجموعة، نشر درجة ومعدل فصلي، رفع ملف عام وملف خاص PDF.</li>
+              <li>التمرير من أعلى لأسفل في الجوال وسطح المكتب للتأكد من ثبات القائمة الجانبية.</li>
+            </ul>
+          </div>
+          <div class="mini-box">
+            <strong>اختبارات الطالب والعزل</strong>
+            <ul>
+              <li>تسجيل طالب ببريد شخصي مع كلمة مرور تحوي مسافة أو رموزًا خاصة.</li>
+              <li>محاولة دخول الطالب قبل اعتماد المسؤول &rarr; تظهر رسالة المراجعة ويُمنع من <code>/portal</code>.</li>
+              <li>دخول الطالب بعد الاعتماد بالرقم الجامعي وبالبريد الشخصي.</li>
+              <li>ظهور المقرر والمحاضرة بدقة الدقائق والدرجة المنشورة والملف الخاص من جلسة متصفح مختلفة.</li>
+              <li>التأكد من عدم قدرة الطالب B على فتح ملف خاص بالطالب A أو مشاهدة درجة غير منشورة.</li>
+              <li>اختبار صفحة <code>/portal/documents</code> في حالتي وجود ملفات وعدم وجود ملفات.</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- 15 -->
+      <section class="card" id="sec-15">
+        <h2>15. دليل استكشاف الأخطاء وحلولها</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>العَرَض / الخطأ</th>
+              <th>السبب المحتمل</th>
+              <th>الحل الدقيق</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>إعدادات الاتصال بقاعدة البيانات والمصادقة غير مكتملة</code></td>
+              <td>غياب <code>SUPABASE_URL</code> / <code>SUPABASE_PUBLISHABLE_KEY</code> أو عدم تطابق المشروع مع <code>VITE_SUPABASE_URL</code>.</td>
+              <td>طابق المتغيرات الخمسة في Vercel Environment Variables وأعد النشر (Redeploy).</td>
+            </tr>
+            <tr>
+              <td><code>رابط التأكيد غير صالح</code> في <code>/auth/callback</code></td>
+              <td>نطاق Vercel غير مضاف في Supabase Redirect URLs أو انتهاء صلاحية الرابط.</td>
+              <td>أضف <code>https://&lt;domain&gt;/auth/callback</code> في Supabase Auth URL Configuration.</td>
+            </tr>
+            <tr>
+              <td>رفع الملف يفشل بـ <code>الملف المرفوع ليس ملف PDF صالحًا</code></td>
+              <td>الملف المُسمى <code>.pdf</code> ليس PDF فعليًا (لا يبدأ بتوقيع <code>%PDF-</code>).</td>
+              <td>ارفع ملف PDF حقيقيًا وحجمه أقل من 20MB.</td>
+            </tr>
+            <tr>
+              <td>الجدول يظهر فارغًا للطالب رغم إضافة محاضرات</td>
+              <td>المجموعة ليست مرتبطة بالطرح الحالي أو حالة التسجيل ليست <code>enrolled</code> أو الفصل الحالي غير معيّن.</td>
+              <td>تحقق في <code>/admin/academic</code> من تعيين الفصل الحالي وفي <code>/admin/students/&lt;id&gt;</code> من وجود تسجيل <code>enrolled</code>.</td>
+            </tr>
+            <tr>
+              <td>فشل وظائف Nitro على Vercel</td>
+              <td>متغير <code>VERCEL</code> أو إصدار Node غير مطابق.</td>
+              <td>تأكد من استخدام Node 20.x/22.x وأن <code>vite.config.ts</code> يحوي خيار <code>nitro: { preset: "vercel" }</code>.</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- 16 -->
+      <section class="card" id="sec-16">
+        <h2>16. الأمان، الخصوصية، النسخ الاحتياطي، والتراجع (Rollback)</h2>
+        <ul>
+          <li><strong>الأسرار والبيانات الحساسة:</strong> لا تُضمّن <code>.env</code> أو مفاتيح <code>SUPABASE_SERVICE_ROLE_KEY</code> أو بيانات طلاب حقيقية في المستودع أو المتصفح أو السجلات.</li>
+          <li><strong>النسخ الاحتياطي في Supabase:</strong> فعّل النسخ الاحتياطي التلقائي اليومي (Automated Backups / PITR) قبل أي ترحيل جديد.</li>
+          <li><strong>الترحيلات المستقبلية:</strong> التزم دائمًا بترحيلات إضافية مرقّمة بعد <code>0006</code> دون مسح أو تعديل الترحيلات السابقة.</li>
+          <li><strong>التراجع في Vercel:</strong> يتيح Vercel استعادة أي Deployment سابق ناجح فوريًا بضغطة واحدة (Instant Rollback) من تبويب Deployments عند أي خلل في الإصدار الجديد.</li>
+        </ul>
+      </section>
+
+      <!-- 17 -->
+      <section class="card" id="sec-17">
+        <h2>17. ما تم التحقق منه فعليًا مقابل القيود والمهام التالية</h2>
+        <div class="callout ok">
+          <strong>تم التحقق منه برمجيًا في بيئة العمل المحلية:</strong>
+          فحص TypeScript (<code>npx tsc --noEmit</code> بدون أخطاء)، اختبارات Vitest الوحدوية والتوجيهية (39/39 ناجحًا في <code>portal-upgrade.test.ts</code> و<code>app-routing.test.tsx</code>)، فحص ESLint لقواعد الشفرة، وبناء الإنتاج الكامل (<code>npm run build</code>).
+        </div>
+        <div class="callout warn">
+          <strong>عناصر تعتمد على النشر والاختبار الحي من طرف المالك:</strong>
+          لم تُنفّذ اختبارات متصفح حية مباشرة ضد مشروع Supabase الإنتاجي أو منصة Vercel في هذه البيئة؛ لذا يلزم بعد إعداد متغيرات البيئة في Vercel وتطبيق الترحيلات <code>0000..0006</code> تشغيل قائمة التحقق العملية في القسم 14 بحساب مسؤول وحسابي طالبين منفصلين للتحقق من الجلسات الحية والرفع والتخزين. كما أن حزمة <code>@lovable.dev/vite-tanstack-config</code> تترك بعض تحذيرات Prettier في ملفات الواجهة المولدة مسبقًا خارج الملفات المعدّلة حديثًا.
+        </div>
+        <h3>تطويرات مستقبلية اختيارية (غير منفذة الآن عن عمد)</h3>
+        <ul>
+          <li>معالجة مجدولة تلقائية لتفريغ <code>storage_cleanup_queue</code> عبر Cron Job دوري.</li>
+          <li>دمج API رسمي مستقبلي مع أنظمة الجامعة الداخلية عند إتاحته.</li>
+          <li>استيراد جماعي للدرجات عبر CSV وتصدير كشوف النتائج بصيغة PDF موقّعة آليًا.</li>
+        </ul>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    function filterSections(q) {
+      const term = (q || "").trim().toLowerCase();
+      document.querySelectorAll("main > section.card").forEach((sec) => {
+        const text = sec.textContent.toLowerCase();
+        sec.style.display = !term || text.includes(term) ? "" : "none";
+      });
+    }
+  </script>
+</body>
+</html>

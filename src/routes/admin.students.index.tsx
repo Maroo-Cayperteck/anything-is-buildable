@@ -2,7 +2,18 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
-import { Check, ClipboardList, Loader2, Plus, Search, Trash2, UserCheck, Users, X } from "lucide-react";
+import {
+  Check,
+  ClipboardList,
+  Loader2,
+  Plus,
+  Search,
+  Trash2,
+  Upload,
+  UserCheck,
+  Users,
+  X,
+} from "lucide-react";
 import { Card } from "@/components/portal/Shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,6 +29,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   adminApproveRegistration,
+  adminBulkImportRoster,
   adminDeleteRosterEntry,
   adminRejectRegistration,
   adminUpsertRosterEntry,
@@ -43,15 +55,19 @@ function AdminStudentsIndex() {
   const [search, setSearch] = useState("");
   const [programId, setProgramId] = useState("");
   const [levelId, setLevelId] = useState("");
+  const [academicYearId, setAcademicYearId] = useState("");
   const [status, setStatus] = useState<"" | "pending" | "active" | "rejected" | "suspended">("");
   const [page, setPage] = useState(1);
 
-  const catalog = useQuery({ queryKey: ["admin-academic-catalog"], queryFn: () => getAcademicCatalog() });
+  const catalog = useQuery({
+    queryKey: ["admin-academic-catalog"],
+    queryFn: () => getAcademicCatalog(),
+  });
   const students = useQuery({
-    queryKey: ["admin-students", search, programId, levelId, status, page],
+    queryKey: ["admin-students", search, programId, levelId, academicYearId, status, page],
     queryFn: () =>
       listAdminStudents({
-        data: { search, programId, levelId, status, page, pageSize: 20 },
+        data: { search, programId, levelId, academicYearId, status, page, pageSize: 20 },
       }),
   });
   const rosterAndReqs = useQuery({
@@ -73,7 +89,77 @@ function AdminStudentsIndex() {
   const [rejecting, setRejecting] = useState(false);
 
   // Per-request program/level overrides when approving non-roster applicants
-  const [reqAssign, setReqAssign] = useState<Record<string, { programId: string; levelId: string }>>({});
+  const [reqAssign, setReqAssign] = useState<
+    Record<string, { programId: string; levelId: string }>
+  >({});
+
+  // CSV bulk roster import state
+  const [csvPreview, setCsvPreview] = useState<{
+    validRows: {
+      student_code: string;
+      approved_email: string;
+      full_name_ar: string;
+      full_name_en: string;
+    }[];
+    errors: string[];
+  } | null>(null);
+  const [importingCsv, setImportingCsv] = useState(false);
+
+  function handleCsvFile(file: File) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const text = String(reader.result ?? "");
+      const lines = text
+        .split(/\r?\n/)
+        .map((l) => l.trim())
+        .filter(Boolean);
+      const validRows: {
+        student_code: string;
+        approved_email: string;
+        full_name_ar: string;
+        full_name_en: string;
+      }[] = [];
+      const errors: string[] = [];
+      const seenCodes = new Set<string>();
+      const seenEmails = new Set<string>();
+
+      lines.forEach((line, idx) => {
+        const cols = line.split(",").map((c) => c.replace(/^["']|["']$/g, "").trim());
+        const [code = "", email = "", nameAr = "", nameEn = ""] = cols;
+        if (
+          idx === 0 &&
+          (code.toLowerCase().includes("code") || email.toLowerCase().includes("email"))
+        ) {
+          return;
+        }
+        if (code.length < 2) {
+          errors.push(`صف ${idx + 1}: الرقم الجامعي غير صالح`);
+          return;
+        }
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+          errors.push(`صف ${idx + 1}: البريد الإلكتروني غير صالح (${email})`);
+          return;
+        }
+        const normCode = code.toUpperCase();
+        const normEmail = email.toLowerCase();
+        if (seenCodes.has(normCode) || seenEmails.has(normEmail)) {
+          errors.push(`صف ${idx + 1}: رقم جامعي أو بريد مكرر داخل الملف`);
+          return;
+        }
+        seenCodes.add(normCode);
+        seenEmails.add(normEmail);
+        validRows.push({
+          student_code: code,
+          approved_email: normEmail,
+          full_name_ar: nameAr,
+          full_name_en: nameEn,
+        });
+      });
+
+      setCsvPreview({ validRows, errors });
+    };
+    reader.readAsText(file, "utf-8");
+  }
 
   const refreshAll = async () => {
     await Promise.all([
@@ -127,6 +213,7 @@ function AdminStudentsIndex() {
 
   const programs = catalog.data?.programs ?? [];
   const levels = catalog.data?.levels ?? [];
+  const years = catalog.data?.years ?? [];
   const requests = rosterAndReqs.data?.requests ?? [];
   const roster = rosterAndReqs.data?.roster ?? [];
   const pendingCount = requests.filter((r) => r.status === "pending").length;
@@ -135,10 +222,16 @@ function AdminStudentsIndex() {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap gap-2">
-        <Button variant={tab === "students" ? "brand" : "outline"} onClick={() => setTab("students")}>
+        <Button
+          variant={tab === "students" ? "brand" : "outline"}
+          onClick={() => setTab("students")}
+        >
           <Users className="h-4 w-4" /> دليل الطلاب ({students.data?.total ?? 0})
         </Button>
-        <Button variant={tab === "requests" ? "brand" : "outline"} onClick={() => setTab("requests")}>
+        <Button
+          variant={tab === "requests" ? "brand" : "outline"}
+          onClick={() => setTab("requests")}
+        >
           <UserCheck className="h-4 w-4" /> طلبات التفعيل ({pendingCount} معلق)
         </Button>
         <Button variant={tab === "roster" ? "brand" : "outline"} onClick={() => setTab("roster")}>
@@ -148,7 +241,7 @@ function AdminStudentsIndex() {
 
       {tab === "students" && (
         <Card title="الطلاب المسجلون" icon={Users}>
-          <div className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
             <div className="relative">
               <Search className="pointer-events-none absolute top-1/2 right-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
@@ -193,6 +286,21 @@ function AdminStudentsIndex() {
             </select>
             <select
               className="rounded-lg border bg-background px-3 py-2 text-sm"
+              value={academicYearId}
+              onChange={(e) => {
+                setAcademicYearId(e.target.value);
+                setPage(1);
+              }}
+            >
+              <option value="">كل الأعوام</option>
+              {years.map((y) => (
+                <option key={y.id} value={y.id}>
+                  {y.name}
+                </option>
+              ))}
+            </select>
+            <select
+              className="rounded-lg border bg-background px-3 py-2 text-sm"
               value={status}
               onChange={(e) => {
                 setStatus(e.target.value as typeof status);
@@ -219,7 +327,9 @@ function AdminStudentsIndex() {
               </Button>
             </div>
           ) : (students.data?.items.length ?? 0) === 0 ? (
-            <p className="py-10 text-center text-sm text-muted-foreground">لا يوجد طلاب مطابقون للبحث.</p>
+            <p className="py-10 text-center text-sm text-muted-foreground">
+              لا يوجد طلاب مطابقون للبحث.
+            </p>
           ) : (
             <div className="-mx-6 overflow-x-auto">
               <table className="w-full text-sm">
@@ -235,7 +345,10 @@ function AdminStudentsIndex() {
                 </thead>
                 <tbody>
                   {students.data?.items.map((st) => {
-                    const badge = STATUS_AR[st.account_status] ?? { label: st.account_status, cls: "bg-muted" };
+                    const badge = STATUS_AR[st.account_status] ?? {
+                      label: st.account_status,
+                      cls: "bg-muted",
+                    };
                     return (
                       <tr key={st.user_id} className="border-t hover:bg-muted/30">
                         <td className="p-4 font-mono text-xs">{st.student_code || "—"}</td>
@@ -243,7 +356,11 @@ function AdminStudentsIndex() {
                         <td className="p-4 text-muted-foreground">{st.program || "—"}</td>
                         <td className="p-4 text-muted-foreground">{st.academic_level || "—"}</td>
                         <td className="p-4 text-center">
-                          <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${badge.cls}`}>{badge.label}</span>
+                          <span
+                            className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${badge.cls}`}
+                          >
+                            {badge.label}
+                          </span>
                         </td>
                         <td className="p-4 text-center">
                           <Button asChild size="sm" variant="outline">
@@ -262,13 +379,23 @@ function AdminStudentsIndex() {
 
           {totalPages > 1 && (
             <div className="mt-6 flex items-center justify-center gap-3">
-              <Button size="sm" variant="outline" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={page <= 1}
+                onClick={() => setPage((p) => p - 1)}
+              >
                 السابق
               </Button>
               <span className="text-xs text-muted-foreground">
                 صفحة {page} من {totalPages}
               </span>
-              <Button size="sm" variant="outline" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={page >= totalPages}
+                onClick={() => setPage((p) => p + 1)}
+              >
                 التالي
               </Button>
             </div>
@@ -280,13 +407,17 @@ function AdminStudentsIndex() {
         <Card title="طلبات تسجيل الطلاب الجدد" icon={UserCheck}>
           {rosterAndReqs.isError ? (
             <div className="space-y-3 py-8 text-center">
-              <p className="text-sm text-destructive">تعذر تحميل طلبات التسجيل من قاعدة البيانات.</p>
+              <p className="text-sm text-destructive">
+                تعذر تحميل طلبات التسجيل من قاعدة البيانات.
+              </p>
               <Button size="sm" variant="outline" onClick={() => rosterAndReqs.refetch()}>
                 إعادة المحاولة
               </Button>
             </div>
           ) : requests.length === 0 ? (
-            <p className="py-10 text-center text-sm text-muted-foreground">لا توجد طلبات تسجيل حاليًا.</p>
+            <p className="py-10 text-center text-sm text-muted-foreground">
+              لا توجد طلبات تسجيل حاليًا.
+            </p>
           ) : (
             <div className="divide-y">
               {requests.map((r) => {
@@ -296,11 +427,18 @@ function AdminStudentsIndex() {
                   ? levels.filter((l) => l.program_id === assign.programId)
                   : levels;
                 return (
-                  <div key={r.id} className="flex flex-wrap items-center justify-between gap-4 py-4">
+                  <div
+                    key={r.id}
+                    className="flex flex-wrap items-center justify-between gap-4 py-4"
+                  >
                     <div>
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="font-semibold">{r.full_name_ar}</span>
-                        <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${badge.cls}`}>{badge.label}</span>
+                        <span
+                          className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${badge.cls}`}
+                        >
+                          {badge.label}
+                        </span>
                         {"roster_verified" in r && !r.roster_verified && (
                           <span className="rounded-full bg-secondary px-2.5 py-0.5 text-xs text-muted-foreground">
                             يتطلب مراجعة يدوية (غير مدرج بالكشف)
@@ -392,10 +530,31 @@ function AdminStudentsIndex() {
         <div className="space-y-6">
           <Card title="إضافة طالب إلى كشف المؤهلين للتسجيل" icon={Plus}>
             <form onSubmit={addRoster} className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-              <Input value={rCode} onChange={(e) => setRCode(e.target.value)} dir="ltr" placeholder="الرقم الجامعي" required />
-              <Input value={rEmail} onChange={(e) => setREmail(e.target.value)} type="email" dir="ltr" placeholder="البريد المعتمد" required />
-              <Input value={rNameAr} onChange={(e) => setRNameAr(e.target.value)} placeholder="الاسم (اختياري)" />
-              <select className="rounded-lg border bg-background px-3 py-2 text-sm" value={rProgramId} onChange={(e) => setRProgramId(e.target.value)}>
+              <Input
+                value={rCode}
+                onChange={(e) => setRCode(e.target.value)}
+                dir="ltr"
+                placeholder="الرقم الجامعي"
+                required
+              />
+              <Input
+                value={rEmail}
+                onChange={(e) => setREmail(e.target.value)}
+                type="email"
+                dir="ltr"
+                placeholder="البريد المعتمد"
+                required
+              />
+              <Input
+                value={rNameAr}
+                onChange={(e) => setRNameAr(e.target.value)}
+                placeholder="الاسم (اختياري)"
+              />
+              <select
+                className="rounded-lg border bg-background px-3 py-2 text-sm"
+                value={rProgramId}
+                onChange={(e) => setRProgramId(e.target.value)}
+              >
                 <option value="">البرنامج (اختياري)</option>
                 {programs.map((p) => (
                   <option key={p.id} value={p.id}>
@@ -403,7 +562,11 @@ function AdminStudentsIndex() {
                   </option>
                 ))}
               </select>
-              <select className="rounded-lg border bg-background px-3 py-2 text-sm" value={rLevelId} onChange={(e) => setRLevelId(e.target.value)}>
+              <select
+                className="rounded-lg border bg-background px-3 py-2 text-sm"
+                value={rLevelId}
+                onChange={(e) => setRLevelId(e.target.value)}
+              >
                 <option value="">المستوى (اختياري)</option>
                 {levels.map((l) => (
                   <option key={l.id} value={l.id}>
@@ -413,15 +576,100 @@ function AdminStudentsIndex() {
               </select>
               <div className="sm:col-span-2 lg:col-span-5">
                 <Button type="submit" variant="brand" disabled={savingRoster}>
-                  {savingRoster ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} إضافة للكشف
+                  {savingRoster ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Plus className="h-4 w-4" />
+                  )}{" "}
+                  إضافة للكشف
                 </Button>
               </div>
             </form>
           </Card>
 
+          <Card title="استيراد كشف المؤهلين عبر CSV (معاينة وتحقق)" icon={Upload}>
+            <div className="space-y-4">
+              <p className="text-xs text-muted-foreground">
+                صيغة الأعمدة:{" "}
+                <span className="font-mono" dir="ltr">
+                  student_code,approved_email,full_name_ar,full_name_en
+                </span>
+                . لا يتم حفظ أي صفوف قبل المعاينة والتأكيد.
+              </p>
+              <input
+                type="file"
+                accept=".csv,text/csv"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) handleCsvFile(file);
+                  e.target.value = "";
+                }}
+                className="block text-sm"
+              />
+              {csvPreview && (
+                <div className="space-y-3 rounded-lg border bg-muted/30 p-4 text-xs">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span>
+                      صفوف صالحة: <strong>{csvPreview.validRows.length}</strong> · أخطاء:{" "}
+                      <strong className={csvPreview.errors.length > 0 ? "text-destructive" : ""}>
+                        {csvPreview.errors.length}
+                      </strong>
+                    </span>
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setCsvPreview(null)}
+                        disabled={importingCsv}
+                      >
+                        إلغاء
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="brand"
+                        disabled={
+                          csvPreview.validRows.length === 0 ||
+                          csvPreview.errors.length > 0 ||
+                          importingCsv
+                        }
+                        onClick={async () => {
+                          setImportingCsv(true);
+                          try {
+                            const res = await adminBulkImportRoster({
+                              data: { rows: csvPreview.validRows },
+                            });
+                            setCsvPreview(null);
+                            await refreshAll();
+                            toast.success(`تم استيراد ${res.importedCount} طالبًا إلى الكشف بنجاح`);
+                          } catch (err) {
+                            toast.error(err instanceof Error ? err.message : "فشل استيراد الملف");
+                          } finally {
+                            setImportingCsv(false);
+                          }
+                        }}
+                      >
+                        {importingCsv ? <Loader2 className="h-4 w-4 animate-spin" /> : null} تأكيد
+                        استيراد الكشف
+                      </Button>
+                    </div>
+                  </div>
+                  {csvPreview.errors.length > 0 && (
+                    <ul className="list-disc space-y-1 pr-5 text-destructive">
+                      {csvPreview.errors.slice(0, 10).map((err, i) => (
+                        <li key={i}>{err}</li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+            </div>
+          </Card>
+
           <Card title={`كشف الطلاب المؤهلين (${roster.length})`} icon={ClipboardList}>
             {roster.length === 0 ? (
-              <p className="py-8 text-center text-sm text-muted-foreground">لا توجد سجلات في كشف المؤهلين بعد.</p>
+              <p className="py-8 text-center text-sm text-muted-foreground">
+                لا توجد سجلات في كشف المؤهلين بعد.
+              </p>
             ) : (
               <div className="-mx-6 overflow-x-auto">
                 <table className="w-full text-sm">
@@ -437,7 +685,11 @@ function AdminStudentsIndex() {
                     {roster.map((item) => (
                       <tr key={item.id} className="border-t">
                         <td className="p-4 font-mono text-xs">{item.student_code}</td>
-                        <td className="p-4 font-mono text-xs" dir="ltr" style={{ textAlign: "right" }}>
+                        <td
+                          className="p-4 font-mono text-xs"
+                          dir="ltr"
+                          style={{ textAlign: "right" }}
+                        >
                           {item.approved_email}
                         </td>
                         <td className="p-4">{item.full_name_ar || "—"}</td>
@@ -469,13 +721,22 @@ function AdminStudentsIndex() {
         </div>
       )}
 
-      <AlertDialog open={!!rejectTarget} onOpenChange={(o) => !o && !rejecting && setRejectTarget(null)}>
+      <AlertDialog
+        open={!!rejectTarget}
+        onOpenChange={(o) => !o && !rejecting && setRejectTarget(null)}
+      >
         <AlertDialogContent dir="rtl">
           <AlertDialogHeader>
             <AlertDialogTitle>رفض طلب التسجيل ({rejectTarget?.code})؟</AlertDialogTitle>
-            <AlertDialogDescription>سيتم منع هذا الحساب من دخول بوابة الطلاب.</AlertDialogDescription>
+            <AlertDialogDescription>
+              سيتم منع هذا الحساب من دخول بوابة الطلاب.
+            </AlertDialogDescription>
           </AlertDialogHeader>
-          <Input value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} placeholder="سبب الرفض (اختياري)" />
+          <Input
+            value={rejectReason}
+            onChange={(e) => setRejectReason(e.target.value)}
+            placeholder="سبب الرفض (اختياري)"
+          />
           <AlertDialogFooter className="gap-2">
             <AlertDialogCancel disabled={rejecting}>إلغاء</AlertDialogCancel>
             <AlertDialogAction

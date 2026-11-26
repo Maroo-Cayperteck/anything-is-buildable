@@ -3,7 +3,10 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { looksLikeEmail, normalizeEmail, normalizeStudentCode } from "./auth-helpers";
 
-function isSchemaCompatError(err: { code?: string | null; message?: string | null } | null, needle: string): boolean {
+function isSchemaCompatError(
+  err: { code?: string | null; message?: string | null } | null,
+  needle: string,
+): boolean {
   if (!err) return false;
   const msg = (err.message ?? "").toLowerCase();
   return (
@@ -11,7 +14,8 @@ function isSchemaCompatError(err: { code?: string | null; message?: string | nul
     err.code === "PGRST204" ||
     err.code === "42P01" ||
     err.code === "PGRST205" ||
-    (msg.includes(needle.toLowerCase()) && (msg.includes("column") || msg.includes("relation") || msg.includes("table")))
+    (msg.includes(needle.toLowerCase()) &&
+      (msg.includes("column") || msg.includes("relation") || msg.includes("table")))
   );
 }
 
@@ -31,37 +35,98 @@ export const signInWithIdentifier = createServerFn({ method: "POST" })
       .parse(d),
   )
   .handler(async ({ data }) => {
-    const { assertAuthRateLimit, createEphemeralPublishableClient, validateServerSupabaseConfig } = await import(
-      "./supabase-config.server"
-    );
+    const { assertAuthRateLimit, createEphemeralPublishableClient, validateServerSupabaseConfig } =
+      await import("./supabase-config.server");
 
-    // Only publishable key required — no service role needed for email lookup
-    validateServerSupabaseConfig({ requireServiceRole: false });
+    const { serviceRoleKey } = validateServerSupabaseConfig({ requireServiceRole: false });
     const cleanIdentifier = normalizeStudentCode(data.identifier);
     assertAuthRateLimit(`login:${cleanIdentifier.toLowerCase()}`);
 
-    let resolvedEmail: string | null = looksLikeEmail(cleanIdentifier) ? normalizeEmail(cleanIdentifier) : null;
+    let resolvedEmail: string | null = looksLikeEmail(cleanIdentifier)
+      ? normalizeEmail(cleanIdentifier)
+      : null;
 
-    if (!resolvedEmail) {
-      // Use the resolve_login_email SECURITY DEFINER RPC — callable with anon/publishable key.
-      // This avoids needing SUPABASE_SERVICE_ROLE_KEY on the server, making it compatible
-      // with Lovable, Vercel edge functions, and other serverless environments.
+    if (!resolvedEmail && serviceRoleKey) {
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      const { data: profileMatch, error: profErr } = await supabaseAdmin
+        .from("student_profiles")
+        .select("user_id, email")
+        .or(`student_code.eq.${cleanIdentifier},username.eq.${cleanIdentifier}`)
+        .limit(1)
+        .maybeSingle();
+
+      if (profErr) {
+        console.error("[auth] student_profiles lookup failed", { code: profErr.code });
+        throw new Error("AUTH_LOOKUP_ERROR: تعذر التحقق من بيانات الحساب على الخادم");
+      }
+
+      if (profileMatch?.email) {
+        resolvedEmail = normalizeEmail(profileMatch.email);
+      } else if (profileMatch?.user_id) {
+        const { data: authLookup } = await supabaseAdmin.auth.admin.getUserById(
+          profileMatch.user_id,
+        );
+        if (authLookup?.user?.email) {
+          resolvedEmail = normalizeEmail(authLookup.user.email);
+        }
+      }
+
+      if (!resolvedEmail) {
+        const { data: reqMatch, error: reqErr } = await supabaseAdmin
+          .from("registration_requests")
+          .select("email")
+          .eq("student_code", cleanIdentifier)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (reqErr && !isSchemaCompatError(reqErr, "registration_requests")) {
+          console.error("[auth] registration_requests lookup failed", { code: reqErr.code });
+          throw new Error("AUTH_LOOKUP_ERROR: تعذر التحقق من بيانات الطلب");
+        }
+        if (reqMatch?.email) {
+          resolvedEmail = normalizeEmail(reqMatch.email);
+        }
+      }
+
+      if (!resolvedEmail) {
+        const { data: rosterMatch, error: rosterErr } = await supabaseAdmin
+          .from("student_roster")
+          .select("approved_email")
+          .eq("student_code", cleanIdentifier)
+          .eq("is_active", true)
+          .maybeSingle();
+
+        if (rosterErr && !isSchemaCompatError(rosterErr, "student_roster")) {
+          console.error("[auth] student_roster lookup failed", { code: rosterErr.code });
+          throw new Error("AUTH_LOOKUP_ERROR: تعذر التحقق من سجل المؤهلين");
+        }
+        if (rosterMatch?.approved_email) {
+          resolvedEmail = normalizeEmail(rosterMatch.approved_email);
+        }
+      }
+    }
+
+    if (!resolvedEmail && !serviceRoleKey) {
+      // Server-side RPC fallback only when SUPABASE_SERVICE_ROLE_KEY is absent; resolvedEmail stays on the server.
       const anonLookupClient = createEphemeralPublishableClient();
       const { data: rpcEmail, error: rpcErr } = await anonLookupClient.rpc("resolve_login_email", {
         p_identifier: cleanIdentifier.toLowerCase(),
       });
 
       if (rpcErr) {
-        // RPC not yet deployed (migration 0006 not applied) — fall back gracefully
         if (
-          rpcErr.code === "42883" || // function does not exist
-          rpcErr.code === "PGRST202" || // could not find the function
+          rpcErr.code === "42883" ||
+          rpcErr.code === "PGRST202" ||
           (rpcErr.message ?? "").toLowerCase().includes("does not exist")
         ) {
           console.warn("[auth] resolve_login_email RPC not found, returning invalid_credentials");
           return { ok: false as const, reason: "invalid_credentials" as const };
         }
-        console.error("[auth] resolve_login_email RPC failed", { code: rpcErr.code, msg: rpcErr.message });
+        console.error("[auth] resolve_login_email RPC failed", {
+          code: rpcErr.code,
+          msg: rpcErr.message,
+        });
         throw new Error("AUTH_LOOKUP_ERROR: تعذر التحقق من بيانات الحساب");
       }
 
@@ -116,18 +181,19 @@ export const getAuthAccountStatus = createServerFn({ method: "GET" })
     const { getUserRolesServer } = await import("./auth.server");
 
     const roles = await getUserRolesServer(context.userId, context.supabase);
-    const [{ data: profile, error: profileErr }, { data: regRequest, error: regErr }] = await Promise.all([
-      context.supabase
-        .from("student_profiles")
-        .select("user_id, account_status, full_name_ar, student_code")
-        .eq("user_id", context.userId)
-        .maybeSingle(),
-      context.supabase
-        .from("registration_requests")
-        .select("status, rejection_reason")
-        .eq("auth_user_id", context.userId)
-        .maybeSingle(),
-    ]);
+    const [{ data: profile, error: profileErr }, { data: regRequest, error: regErr }] =
+      await Promise.all([
+        context.supabase
+          .from("student_profiles")
+          .select("user_id, account_status, full_name_ar, student_code")
+          .eq("user_id", context.userId)
+          .maybeSingle(),
+        context.supabase
+          .from("registration_requests")
+          .select("status, rejection_reason")
+          .eq("auth_user_id", context.userId)
+          .maybeSingle(),
+      ]);
 
     let accountStatus = profile?.account_status ?? null;
     if (profileErr) {
@@ -178,7 +244,11 @@ const registrationSchema = z.object({
   gender: z.enum(["ذكر", "أنثى"]).optional(),
 });
 
-async function validateRegistrationCandidate(input: { studentCode: string; email: string; currentUserId?: string }) {
+async function validateRegistrationCandidate(input: {
+  studentCode: string;
+  email: string;
+  currentUserId?: string;
+}) {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const normalizedCode = normalizeStudentCode(input.studentCode);
   const normalizedEmail = normalizeEmail(input.email);
@@ -225,7 +295,9 @@ async function validateRegistrationCandidate(input: { studentCode: string; email
       throw new Error("تم إيقاف أهليّة هذا الرقم الجامعي في كشف الطلاب؛ يرجى مراجعة شؤون الطلاب");
     }
     if (normalizeEmail(rosterByCode.approved_email) !== normalizedEmail) {
-      throw new Error("البريد الإلكتروني المدخل لا يطابق البريد المسجل لهذا الرقم الجامعي في كشف المؤهلين");
+      throw new Error(
+        "البريد الإلكتروني المدخل لا يطابق البريد المسجل لهذا الرقم الجامعي في كشف المؤهلين",
+      );
     }
     return {
       rosterId: rosterByCode.id,
@@ -261,7 +333,8 @@ async function validateRegistrationCandidate(input: { studentCode: string; email
 export const createRegistrationIntent = createServerFn({ method: "POST" })
   .inputValidator((d: unknown) => registrationSchema.parse(d))
   .handler(async ({ data }) => {
-    const { assertAuthRateLimit, validateServerSupabaseConfig } = await import("./supabase-config.server");
+    const { assertAuthRateLimit, validateServerSupabaseConfig } =
+      await import("./supabase-config.server");
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
     validateServerSupabaseConfig({ requireServiceRole: true });
@@ -320,7 +393,9 @@ export const submitRegistrationRequest = createServerFn({ method: "POST" })
 
     const normalizedEmail = normalizeEmail(data.email);
     const normalizedCode = normalizeStudentCode(data.studentCode);
-    const { data: userLookup, error: userErr } = await supabaseAdmin.auth.admin.getUserById(context.userId);
+    const { data: userLookup, error: userErr } = await supabaseAdmin.auth.admin.getUserById(
+      context.userId,
+    );
     if (userErr || !userLookup?.user?.email) {
       throw new Error("تعذر التحقق من حساب المصادقة");
     }
@@ -379,7 +454,11 @@ export const submitRegistrationRequest = createServerFn({ method: "POST" })
       .ilike("email", normalizedEmail)
       .is("consumed_at", null);
 
-    return { ok: true as const, status: "pending" as const, rosterVerified: candidate.rosterVerified };
+    return {
+      ok: true as const,
+      status: "pending" as const,
+      rosterVerified: candidate.rosterVerified,
+    };
   });
 
 /**
@@ -391,7 +470,9 @@ export const completeRegistrationCallback = createServerFn({ method: "POST" })
   .handler(async ({ context }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
-    const { data: userLookup, error: userErr } = await supabaseAdmin.auth.admin.getUserById(context.userId);
+    const { data: userLookup, error: userErr } = await supabaseAdmin.auth.admin.getUserById(
+      context.userId,
+    );
     if (userErr || !userLookup?.user?.email) {
       throw new Error("تعذر التحقق من حساب المستخدم المؤكد");
     }

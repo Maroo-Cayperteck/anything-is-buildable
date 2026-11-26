@@ -14,14 +14,25 @@ import {
 } from "@/lib/documents-storage";
 import { portalSignIn } from "@/lib/session";
 
+import {
+  looksLikeEmail,
+  normalizeEmail,
+  normalizeStudentCode,
+  normalizeTimeString,
+  parseTimeToMinutes,
+  formatTimeDisplay,
+} from "@/lib/auth-helpers";
+
 const mockFrom = vi.fn();
 const mockGetUserById = vi.fn();
 const mockStorageUpload = vi.fn();
 const mockStorageUploadToSignedUrl = vi.fn();
 const mockClientFrom = vi.fn();
 const mockSignInWithPassword = vi.fn();
+const mockSetSession = vi.fn();
 const mockSignOut = vi.fn();
 const mockGetAuthAccountStatus = vi.fn();
+const mockSignInWithIdentifier = vi.fn();
 
 vi.mock("@/integrations/supabase/client.server", () => ({
   supabaseAdmin: {
@@ -39,6 +50,7 @@ vi.mock("@/integrations/supabase/client", () => ({
     from: (...args: unknown[]) => mockClientFrom(...args),
     auth: {
       signInWithPassword: (...args: unknown[]) => mockSignInWithPassword(...args),
+      setSession: (...args: unknown[]) => mockSetSession(...args),
       signOut: (...args: unknown[]) => mockSignOut(...args),
     },
     storage: {
@@ -52,6 +64,7 @@ vi.mock("@/integrations/supabase/client", () => ({
 
 vi.mock("@/lib/accounts.functions", () => ({
   getAuthAccountStatus: (...args: unknown[]) => mockGetAuthAccountStatus(...args),
+  signInWithIdentifier: (...args: unknown[]) => mockSignInWithIdentifier(...args),
 }));
 
 const mockPrepare = vi.fn();
@@ -318,16 +331,94 @@ describe("Document upload failure handling (no fake success)", () => {
   });
 });
 
-describe("Authentication resilience and pre-migration fallback", () => {
+describe("Authentication resilience, student-code proxy, password preservation & pre-migration fallback", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockSignOut.mockResolvedValue({ error: null });
-  });
-
-  it("recovers cleanly when getAuthAccountStatus fails after signInWithPassword succeeds", async () => {
-    mockSignInWithPassword.mockResolvedValue({
+    mockSetSession.mockResolvedValue({
       data: { user: { id: "stu-1" }, session: { access_token: "tok" } },
       error: null,
+    });
+  });
+
+  it("never creates synthetic students.example.com addresses and sends student codes through server proxy with verbatim password", async () => {
+    mockSignInWithIdentifier.mockResolvedValue({
+      ok: true,
+      accessToken: "access-1",
+      refreshToken: "refresh-1",
+    });
+    mockGetAuthAccountStatus.mockResolvedValue({
+      userId: "stu-1",
+      roles: ["student"],
+      accountStatus: "active",
+      registrationStatus: "active",
+      rejectionReason: null,
+    });
+
+    const result = await portalSignIn(" 925250059 ", "  secret with spaces  ");
+    expect(result).toEqual({ error: null, role: "student" });
+    expect(mockSignInWithIdentifier).toHaveBeenCalledWith({
+      data: {
+        identifier: "925250059",
+        password: "  secret with spaces  ",
+      },
+    });
+    expect(mockSignInWithPassword).not.toHaveBeenCalled();
+    expect(mockSetSession).toHaveBeenCalledWith({
+      access_token: "access-1",
+      refresh_token: "refresh-1",
+    });
+  });
+
+  it("authenticates personal email addresses directly with verbatim password", async () => {
+    mockSignInWithPassword.mockResolvedValue({
+      data: { user: { id: "stu-email" }, session: { access_token: "tok" } },
+      error: null,
+    });
+    mockGetAuthAccountStatus.mockResolvedValue({
+      userId: "stu-email",
+      roles: ["student"],
+      accountStatus: "active",
+      registrationStatus: "active",
+      rejectionReason: null,
+    });
+
+    const result = await portalSignIn("Student@Gmail.COM", "  Pa$$w0rd  ");
+    expect(result).toEqual({ error: null, role: "student" });
+    expect(mockSignInWithPassword).toHaveBeenCalledWith({
+      email: "student@gmail.com",
+      password: "  Pa$$w0rd  ",
+    });
+  });
+
+  it("distinguishes email confirmation required and pending registration from invalid credentials", async () => {
+    mockSignInWithIdentifier.mockResolvedValue({ ok: false, reason: "email_not_confirmed" });
+    const unconfirmed = await portalSignIn("925250059", "secret");
+    expect(unconfirmed.role).toBeNull();
+    expect(unconfirmed.error).toContain("تأكيد بريدك");
+
+    mockSignInWithPassword.mockResolvedValue({
+      data: { user: { id: "stu-pending" }, session: { access_token: "tok" } },
+      error: null,
+    });
+    mockGetAuthAccountStatus.mockResolvedValue({
+      userId: "stu-pending",
+      roles: [],
+      accountStatus: null,
+      registrationStatus: "pending",
+      rejectionReason: null,
+    });
+    const pendingRes = await portalSignIn("applicant@gmail.com", "secret");
+    expect(pendingRes.role).toBeNull();
+    expect(pendingRes.error).toContain("قيد المراجعة");
+    expect(mockSignOut).toHaveBeenCalled();
+  });
+
+  it("recovers cleanly when getAuthAccountStatus fails after student-code proxy succeeds", async () => {
+    mockSignInWithIdentifier.mockResolvedValue({
+      ok: true,
+      accessToken: "tok",
+      refreshToken: "ref",
     });
     mockGetAuthAccountStatus.mockRejectedValue(new Error("Missing SUPABASE_SERVICE_ROLE_KEY"));
     mockClientFrom.mockImplementation((table: string) => {
@@ -362,7 +453,12 @@ describe("Authentication resilience and pre-migration fallback", () => {
   });
 
   it("allows pre-migration student login when account_status column does not exist yet", async () => {
-    mockSignInWithPassword.mockResolvedValue({
+    mockSignInWithIdentifier.mockResolvedValue({
+      ok: true,
+      accessToken: "tok",
+      refreshToken: "ref",
+    });
+    mockSetSession.mockResolvedValue({
       data: { user: { id: "stu-legacy" }, session: { access_token: "tok" } },
       error: null,
     });
@@ -410,7 +506,12 @@ describe("Authentication resilience and pre-migration fallback", () => {
   });
 
   it("still blocks suspended students even when falling back from getAuthAccountStatus failure", async () => {
-    mockSignInWithPassword.mockResolvedValue({
+    mockSignInWithIdentifier.mockResolvedValue({
+      ok: true,
+      accessToken: "tok",
+      refreshToken: "ref",
+    });
+    mockSetSession.mockResolvedValue({
       data: { user: { id: "stu-susp" }, session: { access_token: "tok" } },
       error: null,
     });
@@ -445,5 +546,23 @@ describe("Authentication resilience and pre-migration fallback", () => {
       role: null,
     });
     expect(mockSignOut).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("Auth normalization and minute-precision timetable helpers", () => {
+  it("normalizes personal emails and student codes cleanly", () => {
+    expect(normalizeEmail(" Student@Gmail.COM ")).toBe("student@gmail.com");
+    expect(normalizeStudentCode("  925250059  ")).toBe("925250059");
+    expect(looksLikeEmail("student@outlook.com")).toBe(true);
+    expect(looksLikeEmail("925250059")).toBe(false);
+  });
+
+  it("normalizes and converts minute-level lecture times accurately", () => {
+    expect(normalizeTimeString("08:30")).toBe("08:30:00");
+    expect(normalizeTimeString("21:45:00")).toBe("21:45:00");
+    expect(parseTimeToMinutes("08:35:00")).toBe(515);
+    expect(parseTimeToMinutes("21:45:00")).toBe(1305);
+    expect(formatTimeDisplay("09:15:00", 9)).toBe("09:15");
+    expect(formatTimeDisplay(null, 14)).toBe("14:00");
   });
 });

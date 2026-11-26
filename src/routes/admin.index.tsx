@@ -1,7 +1,20 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { CalendarDays, FileText, History, Loader2, UserCheck, UserPlus, Users } from "lucide-react";
+import {
+  BookOpen,
+  CalendarDays,
+  FileText,
+  GraduationCap,
+  History,
+  Layers,
+  Loader2,
+  ShieldOff,
+  UserCheck,
+  UserPlus,
+  Users,
+} from "lucide-react";
 import { Card, StatCard } from "@/components/portal/Shell";
+import { Button } from "@/components/ui/button";
 import { getAdminOverview } from "@/lib/admin.functions";
 
 export const Route = createFileRoute("/admin/")({
@@ -9,7 +22,7 @@ export const Route = createFileRoute("/admin/")({
 });
 
 function AdminOverview() {
-  const { data, isLoading, isError } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["admin-overview"],
     queryFn: () => getAdminOverview(),
   });
@@ -23,19 +36,67 @@ function AdminOverview() {
   }
 
   if (isError || !data) {
-    return <div className="rounded-xl border bg-card p-8 text-center text-destructive">تعذر تحميل بيانات لوحة المسؤول.</div>;
+    return (
+      <div className="space-y-4 rounded-xl border bg-card p-8 text-center">
+        <p className="text-destructive">تعذر تحميل بيانات لوحة المسؤول.</p>
+        <Button variant="outline" onClick={() => refetch()}>
+          إعادة المحاولة
+        </Button>
+      </div>
+    );
   }
 
   const { counts, recentLogs } = data;
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard icon={Users} label="إجمالي الطلاب" value={counts.totalStudents} tone="info" />
-        <StatCard icon={UserCheck} label="الطلاب النشطون" value={counts.activeStudents} tone="success" />
-        <StatCard icon={UserPlus} label="طلبات معلقة" value={counts.pendingRegistrations} tone="gold" />
-        <StatCard icon={FileText} label="ملفات منشورة" value={counts.publishedDocuments} tone="info" />
-        <StatCard icon={CalendarDays} label="فعاليات قادمة" value={counts.upcomingEvents} tone="danger" />
+        <StatCard
+          icon={UserCheck}
+          label="الطلاب النشطون"
+          value={counts.activeStudents}
+          tone="success"
+        />
+        <StatCard
+          icon={UserPlus}
+          label="طلبات معلقة"
+          value={counts.pendingRegistrations}
+          tone="gold"
+        />
+        <StatCard
+          icon={ShieldOff}
+          label="حسابات معلقة"
+          value={counts.suspendedStudents}
+          tone="danger"
+        />
+        <StatCard
+          icon={Layers}
+          label="البرامج الأكاديمية"
+          value={counts.programsCount}
+          sub={`${counts.activeSemestersCount} فصل حالي`}
+          tone="info"
+        />
+        <StatCard
+          icon={BookOpen}
+          label="المقررات والطرح"
+          value={counts.coursesCount}
+          sub={`${counts.offeringsCount} طرح متاح`}
+          tone="gold"
+        />
+        <StatCard
+          icon={FileText}
+          label="ملفات منشورة"
+          value={counts.publishedDocuments}
+          tone="info"
+        />
+        <StatCard
+          icon={CalendarDays}
+          label="فعاليات قادمة"
+          value={counts.upcomingEvents}
+          sub="مقيدة من قاعدة البيانات"
+          tone="danger"
+        />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
@@ -50,17 +111,23 @@ function AdminOverview() {
           }
         >
           {recentLogs.length === 0 ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">لا توجد عمليات مسجلة بعد.</p>
+            <p className="py-6 text-center text-sm text-muted-foreground">
+              لا توجد عمليات مسجلة بعد.
+            </p>
           ) : (
             <ul className="divide-y text-sm">
               {recentLogs.map((log) => (
                 <li key={log.id} className="flex flex-wrap items-center justify-between gap-2 py-3">
                   <div>
-                    <span className="font-mono text-xs font-semibold text-primary">{log.action}</span>
+                    <span className="font-mono text-xs font-semibold text-primary">
+                      {log.action}
+                    </span>
                     <span className="mx-2 text-muted-foreground">·</span>
                     <span className="text-muted-foreground">{log.entity_type}</span>
                     {log.actor_label && (
-                      <span className="mr-2 text-xs text-muted-foreground">({log.actor_label})</span>
+                      <span className="mr-2 text-xs text-muted-foreground">
+                        ({log.actor_label})
+                      </span>
                     )}
                   </div>
                   <span className="font-mono text-xs text-muted-foreground" dir="ltr">

@@ -32,8 +32,94 @@ function classifyAuthError(err: unknown): string {
   return "تعذر الاتصال بخدمة المصادقة، يرجى المحاولة لاحقًا.";
 }
 
-async function fetchStatusSafely(): Promise<ResolvedAccountStatus> {
-  return (await getAuthAccountStatus()) as ResolvedAccountStatus;
+function isSchemaCompatFailure(
+  err: { code?: string | null; message?: string | null } | null,
+  needle: string,
+): boolean {
+  if (!err) return false;
+  const msg = (err.message ?? "").toLowerCase();
+  return (
+    err.code === "42703" ||
+    err.code === "PGRST204" ||
+    err.code === "42P01" ||
+    err.code === "PGRST205" ||
+    (msg.includes(needle.toLowerCase()) &&
+      (msg.includes("column") || msg.includes("relation") || msg.includes("table")))
+  );
+}
+
+async function fetchStatusViaUserRls(userId: string): Promise<ResolvedAccountStatus> {
+  const [
+    { data: roleRows, error: roleErr },
+    { data: profile, error: profErr },
+    { data: regReq, error: regErr },
+  ] = await Promise.all([
+    supabase.from("user_roles").select("role").eq("user_id", userId),
+    supabase
+      .from("student_profiles")
+      .select("user_id, account_status")
+      .eq("user_id", userId)
+      .maybeSingle(),
+    supabase
+      .from("registration_requests")
+      .select("status, rejection_reason")
+      .eq("auth_user_id", userId)
+      .maybeSingle(),
+  ]);
+
+  if (roleErr) {
+    throw new Error("AUTH_STATUS_ERROR: تعذر التحقق من صلاحيات الحساب");
+  }
+
+  const roles = (roleRows ?? []).map((r) => r.role as Role);
+  let accountStatus: AccountStatus | null = profile?.account_status ?? null;
+
+  if (profErr) {
+    if (isSchemaCompatFailure(profErr, "account_status")) {
+      const { data: legacyProfile, error: legacyErr } = await supabase
+        .from("student_profiles")
+        .select("user_id")
+        .eq("user_id", userId)
+        .maybeSingle();
+      if (legacyErr) {
+        throw new Error("AUTH_STATUS_ERROR: تعذر التحقق من ملف الطالب");
+      }
+      if (legacyProfile || roles.includes("student")) {
+        accountStatus = "active";
+      }
+    } else {
+      throw new Error("AUTH_STATUS_ERROR: تعذر التحقق من حالة حساب الطالب");
+    }
+  }
+
+  if (regErr && !isSchemaCompatFailure(regErr, "registration_requests")) {
+    throw new Error("AUTH_STATUS_ERROR: تعذر التحقق من حالة طلب التسجيل");
+  }
+
+  return {
+    userId,
+    roles,
+    accountStatus,
+    registrationStatus: (regReq?.status as AccountStatus | null) ?? null,
+    rejectionReason: regReq?.rejection_reason ?? null,
+  };
+}
+
+async function fetchStatusSafely(userId?: string): Promise<ResolvedAccountStatus> {
+  try {
+    return (await getAuthAccountStatus()) as ResolvedAccountStatus;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "";
+    if (
+      userId &&
+      !msg.includes("Unauthorized") &&
+      !msg.includes("Forbidden") &&
+      !msg.includes("AUTH_STATUS_ERROR")
+    ) {
+      return await fetchStatusViaUserRls(userId);
+    }
+    throw err;
+  }
 }
 
 export async function portalSignIn(
@@ -43,6 +129,7 @@ export async function portalSignIn(
   const trimmedIdentifier = normalizeStudentCode(identifier);
   // IMPORTANT: Never trim or mutate password; leading/trailing spaces are valid password characters.
   const rawPassword = password;
+  let signedInUserId: string | undefined;
 
   // Step 1: Authenticate via Supabase Auth (direct email or server-proxied student-code/username lookup)
   try {
@@ -56,14 +143,18 @@ export async function portalSignIn(
         const msg = (error.message ?? "").toLowerCase();
         if (msg.includes("email not confirmed") || error.code === "email_not_confirmed") {
           return {
-            error: "يرجى تأكيد بريدك الإلكتروني عبر رابط التفعيل المرسل إلى بريدك قبل تسجيل الدخول.",
+            error:
+              "يرجى تأكيد بريدك الإلكتروني عبر رابط التفعيل المرسل إلى بريدك قبل تسجيل الدخول.",
             role: null,
           };
         }
         if (error.status === 429) {
           return { error: "تم تجاوز عدد محاولات تسجيل الدخول؛ يرجى الانتظار قليلًا.", role: null };
         }
-        if (error.name === "AuthRetryableFetchError" || (error.status !== undefined && (error.status === 0 || error.status >= 500))) {
+        if (
+          error.name === "AuthRetryableFetchError" ||
+          (error.status !== undefined && (error.status === 0 || error.status >= 500))
+        ) {
           return { error: "تعذر الاتصال بخدمة المصادقة، يرجى المحاولة لاحقًا.", role: null };
         }
         return { error: "بيانات الدخول غير صحيحة", role: null };
@@ -72,6 +163,7 @@ export async function portalSignIn(
       if (!data.user || !data.session) {
         return { error: "بيانات الدخول غير صحيحة", role: null };
       }
+      signedInUserId = data.user.id;
     } else {
       const proxyRes = await signInWithIdentifier({
         data: { identifier: trimmedIdentifier, password: rawPassword },
@@ -80,7 +172,8 @@ export async function portalSignIn(
       if (!proxyRes.ok) {
         if (proxyRes.reason === "email_not_confirmed") {
           return {
-            error: "يرجى تأكيد بريدك الإلكتروني عبر رابط التفعيل المرسل إلى بريدك قبل تسجيل الدخول.",
+            error:
+              "يرجى تأكيد بريدك الإلكتروني عبر رابط التفعيل المرسل إلى بريدك قبل تسجيل الدخول.",
             role: null,
           };
         }
@@ -90,13 +183,14 @@ export async function portalSignIn(
         return { error: "بيانات الدخول غير صحيحة", role: null };
       }
 
-      const { error: setErr } = await supabase.auth.setSession({
+      const { data: setData, error: setErr } = await supabase.auth.setSession({
         access_token: proxyRes.accessToken,
         refresh_token: proxyRes.refreshToken,
       });
       if (setErr) {
         return { error: "تعذر تثبيت جلسة المصادقة في المتصفح", role: null };
       }
+      signedInUserId = setData.user?.id ?? setData.session?.user?.id;
     }
   } catch (err) {
     return { error: classifyAuthError(err), role: null };
@@ -104,7 +198,7 @@ export async function portalSignIn(
 
   // Step 2: Verify server-authoritative roles and account/registration status
   try {
-    const status = await fetchStatusSafely();
+    const status = await fetchStatusSafely(signedInUserId);
 
     if (status.roles.includes("admin")) {
       return { error: null, role: "admin" };
@@ -159,7 +253,7 @@ export async function fetchRoles(): Promise<Role[]> {
   try {
     const { data } = await supabase.auth.getUser();
     if (!data.user) return [];
-    const status = await fetchStatusSafely();
+    const status = await fetchStatusSafely(data.user.id);
     if (status.roles.includes("admin")) return ["admin"];
     if (status.roles.includes("student") && status.accountStatus === "active") return ["student"];
     return [];
@@ -173,7 +267,10 @@ export async function fetchRoles(): Promise<Role[]> {
  * Never falls back to cookies or localStorage when Supabase Auth fails.
  */
 export function useRoleGate(required: Role) {
-  const [state, setState] = useState<{ status: "loading" | "ok" | "denied"; session: Session | null }>({
+  const [state, setState] = useState<{
+    status: "loading" | "ok" | "denied";
+    session: Session | null;
+  }>({
     status: "loading",
     session: null,
   });
@@ -194,7 +291,7 @@ export function useRoleGate(required: Role) {
           return;
         }
 
-        const status = await fetchStatusSafely();
+        const status = await fetchStatusSafely(userRes.user.id);
         const isAuthorized =
           required === "admin"
             ? status.roles.includes("admin")
