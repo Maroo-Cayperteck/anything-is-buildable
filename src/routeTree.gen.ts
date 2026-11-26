@@ -20,6 +20,7 @@ import { Route as AdminDocumentsRouteImport } from './routes/admin.documents'
 import { Route as AdminEventsRouteImport } from './routes/admin.events'
 import { Route as AdminLogsRouteImport } from './routes/admin.logs'
 import { Route as AdminStudentsRouteImport } from './routes/admin.students'
+import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
 import { Route as PortalIndexRouteImport } from './routes/portal.index'
 import { Route as PortalCoursesRouteImport } from './routes/portal.courses'
 import { Route as PortalDocumentsRouteImport } from './routes/portal.documents'
@@ -86,6 +87,11 @@ const AdminStudentsRoute = AdminStudentsRouteImport.update({
   path: '/students',
   getParentRoute: () => AdminRoute,
 } as any)
+const AuthCallbackRoute = AuthCallbackRouteImport.update({
+  id: '/auth/callback',
+  path: '/auth/callback',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PortalIndexRoute = PortalIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -148,6 +154,7 @@ export interface FileRoutesByFullPath {
   '/admin/events': typeof AdminEventsRoute
   '/admin/logs': typeof AdminLogsRoute
   '/admin/students': typeof AdminStudentsRouteWithChildren
+  '/auth/callback': typeof AuthCallbackRoute
   '/portal/courses': typeof PortalCoursesRoute
   '/portal/documents': typeof PortalDocumentsRoute
   '/portal/events': typeof PortalEventsRoute
@@ -168,6 +175,7 @@ export interface FileRoutesByTo {
   '/admin/documents': typeof AdminDocumentsRoute
   '/admin/events': typeof AdminEventsRoute
   '/admin/logs': typeof AdminLogsRoute
+  '/auth/callback': typeof AuthCallbackRoute
   '/portal/courses': typeof PortalCoursesRoute
   '/portal/documents': typeof PortalDocumentsRoute
   '/portal/events': typeof PortalEventsRoute
@@ -192,6 +200,7 @@ export interface FileRoutesById {
   '/admin/events': typeof AdminEventsRoute
   '/admin/logs': typeof AdminLogsRoute
   '/admin/students': typeof AdminStudentsRouteWithChildren
+  '/auth/callback': typeof AuthCallbackRoute
   '/portal/courses': typeof PortalCoursesRoute
   '/portal/documents': typeof PortalDocumentsRoute
   '/portal/events': typeof PortalEventsRoute
@@ -217,6 +226,7 @@ export interface FileRouteTypes {
     | '/admin/events'
     | '/admin/logs'
     | '/admin/students'
+    | '/auth/callback'
     | '/portal/courses'
     | '/portal/documents'
     | '/portal/events'
@@ -237,6 +247,7 @@ export interface FileRouteTypes {
     | '/admin/documents'
     | '/admin/events'
     | '/admin/logs'
+    | '/auth/callback'
     | '/portal/courses'
     | '/portal/documents'
     | '/portal/events'
@@ -260,6 +271,7 @@ export interface FileRouteTypes {
     | '/admin/events'
     | '/admin/logs'
     | '/admin/students'
+    | '/auth/callback'
     | '/portal/courses'
     | '/portal/documents'
     | '/portal/events'
@@ -279,6 +291,7 @@ export interface RootRouteChildren {
   AdminLoginRoute: typeof AdminLoginRoute
   PortalRoute: typeof PortalRouteWithChildren
   RegisterRoute: typeof RegisterRoute
+  AuthCallbackRoute: typeof AuthCallbackRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -359,6 +372,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/admin/students'
       preLoaderRoute: typeof AdminStudentsRouteImport
       parentRoute: typeof AdminRoute
+    }
+    '/auth/callback': {
+      id: '/auth/callback'
+      path: '/auth/callback'
+      fullPath: '/auth/callback'
+      preLoaderRoute: typeof AuthCallbackRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/portal/': {
       id: '/portal/'
@@ -498,6 +518,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdminLoginRoute: AdminLoginRoute,
   PortalRoute: PortalRouteWithChildren,
   RegisterRoute: RegisterRoute,
+  AuthCallbackRoute: AuthCallbackRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
