@@ -81,8 +81,8 @@ function Dashboard() {
             <ul className="divide-y">
               {upcoming.map((s) => (
                 <li key={s.id} className="flex items-center gap-4 py-3">
-                  <div className="w-24 font-mono text-sm text-muted-foreground" dir="ltr">
-                    {s.start}:00 – {s.end}:00
+                  <div className="w-28 font-mono text-xs text-muted-foreground" dir="ltr">
+                    {s.startTime} – {s.endTime}
                   </div>
                   <div className="flex-1" dir="ltr">
                     <div className="text-left font-medium">{s.course}</div>

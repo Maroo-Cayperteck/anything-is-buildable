@@ -2,8 +2,8 @@ import { useEffect, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
-import { getAuthAccountStatus } from "./accounts.functions";
-import { usernameToEmail } from "./auth-helpers";
+import { getAuthAccountStatus, signInWithIdentifier } from "./accounts.functions";
+import { looksLikeEmail, normalizeEmail, normalizeStudentCode } from "./auth-helpers";
 
 export type Role = "student" | "admin";
 type AccountStatus = Database["public"]["Enums"]["account_status"];
@@ -16,105 +16,95 @@ type ResolvedAccountStatus = {
   rejectionReason: string | null;
 };
 
-function toLoginEmail(identifier: string): string {
-  const trimmed = identifier.trim();
-  return trimmed.includes("@") ? trimmed.toLowerCase() : usernameToEmail(trimmed);
-}
+function classifyAuthError(err: unknown): string {
+  const msg = err instanceof Error ? err.message : String(err ?? "");
+  const lower = msg.toLowerCase();
 
-function isMissingColumnError(
-  err: { code?: string | null; message?: string | null } | null,
-  column: string,
-): boolean {
-  if (!err) return false;
-  const msg = (err.message ?? "").toLowerCase();
-  return (
-    err.code === "42703" ||
-    err.code === "PGRST204" ||
-    (msg.includes(column.toLowerCase()) && msg.includes("column"))
-  );
-}
-
-async function resolveAuthAccountStatus(userId: string): Promise<ResolvedAccountStatus> {
-  try {
-    return await getAuthAccountStatus();
-  } catch {
-    // Fall back to authenticated RLS-protected queries on the user's active Supabase session
-    // if the server function RPC fails (e.g., missing server runtime env or middleware failure).
-    const { data: roleRows, error: roleErr } = await supabase
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", userId);
-    if (roleErr) throw roleErr;
-
-    const roles = (roleRows ?? []).map((r) => r.role as Role);
-
-    let accountStatus: AccountStatus | null = null;
-    const { data: profile, error: profErr } = await supabase
-      .from("student_profiles")
-      .select("user_id, account_status")
-      .eq("user_id", userId)
-      .maybeSingle();
-
-    if (!profErr) {
-      accountStatus = profile?.account_status ?? null;
-    } else if (isMissingColumnError(profErr, "account_status")) {
-      const { data: legacyProf } = await supabase
-        .from("student_profiles")
-        .select("user_id")
-        .eq("user_id", userId)
-        .maybeSingle();
-      if (legacyProf || roles.includes("student")) {
-        accountStatus = "active";
-      }
-    } else {
-      throw profErr;
-    }
-
-    let registrationStatus: AccountStatus | null = null;
-    let rejectionReason: string | null = null;
-    const { data: reg, error: regErr } = await supabase
-      .from("registration_requests")
-      .select("status, rejection_reason")
-      .eq("auth_user_id", userId)
-      .maybeSingle();
-    if (!regErr && reg) {
-      registrationStatus = reg.status;
-      rejectionReason = reg.rejection_reason ?? null;
-    }
-
-    return {
-      userId,
-      roles,
-      accountStatus,
-      registrationStatus,
-      rejectionReason,
-    };
+  if (lower.includes("config_error") || lower.includes("missing supabase environment variable")) {
+    return "إعدادات الاتصال بقاعدة البيانات والمصادقة غير مكتملة على الخادم.";
   }
+  if (lower.includes("rate_limit") || lower.includes("too many requests")) {
+    return "تم تجاوز عدد محاولات تسجيل الدخول المسموح بها؛ يرجى المحاولة بعد دقيقة.";
+  }
+  if (lower.includes("auth_status_error") || lower.includes("auth_lookup_error")) {
+    return "تعذر التحقق من حالة وصلاحيات الحساب على الخادم، يرجى المحاولة لاحقًا.";
+  }
+  return "تعذر الاتصال بخدمة المصادقة، يرجى المحاولة لاحقًا.";
+}
+
+async function fetchStatusSafely(): Promise<ResolvedAccountStatus> {
+  return (await getAuthAccountStatus()) as ResolvedAccountStatus;
 }
 
 export async function portalSignIn(
   identifier: string,
   password: string,
 ): Promise<{ error: string | null; role: Role | null }> {
-  const email = toLoginEmail(identifier);
-  const trimmedPass = password.trim();
+  const trimmedIdentifier = normalizeStudentCode(identifier);
+  // IMPORTANT: Never trim or mutate password; leading/trailing spaces are valid password characters.
+  const rawPassword = password;
 
-  let userId: string;
+  // Step 1: Authenticate via Supabase Auth (direct email or server-proxied student-code/username lookup)
   try {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password: trimmedPass,
-    });
-    if (error || !data.user || !data.session) {
-      return { error: "اسم المستخدم أو كلمة المرور غير صحيحة", role: null };
+    if (looksLikeEmail(trimmedIdentifier)) {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: normalizeEmail(trimmedIdentifier),
+        password: rawPassword,
+      });
+
+      if (error) {
+        const msg = (error.message ?? "").toLowerCase();
+        if (msg.includes("email not confirmed") || error.code === "email_not_confirmed") {
+          return {
+            error: "يرجى تأكيد بريدك الإلكتروني عبر رابط التفعيل المرسل إلى بريدك قبل تسجيل الدخول.",
+            role: null,
+          };
+        }
+        if (error.status === 429) {
+          return { error: "تم تجاوز عدد محاولات تسجيل الدخول؛ يرجى الانتظار قليلًا.", role: null };
+        }
+        if (error.name === "AuthRetryableFetchError" || (error.status !== undefined && (error.status === 0 || error.status >= 500))) {
+          return { error: "تعذر الاتصال بخدمة المصادقة، يرجى المحاولة لاحقًا.", role: null };
+        }
+        return { error: "بيانات الدخول غير صحيحة", role: null };
+      }
+
+      if (!data.user || !data.session) {
+        return { error: "بيانات الدخول غير صحيحة", role: null };
+      }
+    } else {
+      const proxyRes = await signInWithIdentifier({
+        data: { identifier: trimmedIdentifier, password: rawPassword },
+      });
+
+      if (!proxyRes.ok) {
+        if (proxyRes.reason === "email_not_confirmed") {
+          return {
+            error: "يرجى تأكيد بريدك الإلكتروني عبر رابط التفعيل المرسل إلى بريدك قبل تسجيل الدخول.",
+            role: null,
+          };
+        }
+        if (proxyRes.reason === "rate_limited") {
+          return { error: "تم تجاوز عدد محاولات تسجيل الدخول؛ يرجى الانتظار قليلًا.", role: null };
+        }
+        return { error: "بيانات الدخول غير صحيحة", role: null };
+      }
+
+      const { error: setErr } = await supabase.auth.setSession({
+        access_token: proxyRes.accessToken,
+        refresh_token: proxyRes.refreshToken,
+      });
+      if (setErr) {
+        return { error: "تعذر تثبيت جلسة المصادقة في المتصفح", role: null };
+      }
     }
-    userId = data.user.id;
-  } catch {
-    return { error: "تعذر الاتصال بخدمة المصادقة، يرجى المحاولة لاحقًا", role: null };
+  } catch (err) {
+    return { error: classifyAuthError(err), role: null };
   }
 
+  // Step 2: Verify server-authoritative roles and account/registration status
   try {
-    const status = await resolveAuthAccountStatus(userId);
+    const status = await fetchStatusSafely();
 
     if (status.roles.includes("admin")) {
       return { error: null, role: "admin" };
@@ -151,8 +141,13 @@ export async function portalSignIn(
     }
 
     return { error: "لا يملك هذا الحساب صلاحية الوصول للبوابة حاليًا", role: null };
-  } catch {
-    return { error: "تعذر الاتصال بخدمة المصادقة، يرجى المحاولة لاحقًا", role: null };
+  } catch (err) {
+    await supabase.auth.signOut().catch(() => {});
+    const msg = err instanceof Error ? err.message : "";
+    if (msg.includes("Unauthorized") || msg.includes("Forbidden")) {
+      return { error: "لا يملك هذا الحساب صلاحية الوصول للبوابة حاليًا", role: null };
+    }
+    return { error: "تعذر التحقق من حالة وصلاحيات الحساب، يرجى المحاولة لاحقًا.", role: null };
   }
 }
 
@@ -164,7 +159,7 @@ export async function fetchRoles(): Promise<Role[]> {
   try {
     const { data } = await supabase.auth.getUser();
     if (!data.user) return [];
-    const status = await resolveAuthAccountStatus(data.user.id);
+    const status = await fetchStatusSafely();
     if (status.roles.includes("admin")) return ["admin"];
     if (status.roles.includes("student") && status.accountStatus === "active") return ["student"];
     return [];
@@ -178,10 +173,7 @@ export async function fetchRoles(): Promise<Role[]> {
  * Never falls back to cookies or localStorage when Supabase Auth fails.
  */
 export function useRoleGate(required: Role) {
-  const [state, setState] = useState<{
-    status: "loading" | "ok" | "denied";
-    session: Session | null;
-  }>({
+  const [state, setState] = useState<{ status: "loading" | "ok" | "denied"; session: Session | null }>({
     status: "loading",
     session: null,
   });
@@ -202,7 +194,7 @@ export function useRoleGate(required: Role) {
           return;
         }
 
-        const status = await resolveAuthAccountStatus(userRes.user.id);
+        const status = await fetchStatusSafely();
         const isAuthorized =
           required === "admin"
             ? status.roles.includes("admin")

@@ -25,6 +25,8 @@ function Login() {
     <LoginCard
       title="مرحبًا بعودتك"
       subtitle="سجّل الدخول إلى بوابة الطالب"
+      identifierLabel="الرقم الجامعي أو البريد الإلكتروني"
+      identifierPlaceholder="20260001 or name@gmail.com"
       onSubmit={async (u, p) => {
         const { error, role } = await portalSignIn(u, p);
         if (error) return error;

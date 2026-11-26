@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { AlertCircle, CalendarDays, Loader2 } from "lucide-react";
 import { Card } from "@/components/portal/Shell";
+import { Button } from "@/components/ui/button";
 import { DAYS, KIND_LABEL, type SlotKind } from "@/lib/portal-data";
 import { usePortalSnapshot } from "@/lib/use-profile";
 import { cn } from "@/lib/utils";
@@ -16,21 +17,39 @@ export const Route = createFileRoute("/portal/registration")({
   component: Registration,
 });
 
-const HOURS = Array.from({ length: 12 }, (_, i) => 8 + i);
 const KIND_CLS: Record<SlotKind, string> = {
   lecture: "bg-lecture text-primary-foreground",
   section: "bg-section text-foreground",
   lab: "bg-lab text-foreground",
 };
 
+function computeScheduleBounds(slots: { startMinutes: number; endMinutes: number }[]) {
+  if (slots.length === 0) return { startHour: 8, endHour: 18 };
+  const minMin = Math.min(...slots.map((s) => s.startMinutes));
+  const maxMin = Math.max(...slots.map((s) => s.endMinutes));
+  const startHour = Math.max(0, Math.min(8, Math.floor(minMin / 60)));
+  const endHour = Math.min(24, Math.max(18, Math.ceil(maxMin / 60)));
+  return { startHour, endHour };
+}
+
 function Registration() {
   const [semesterId, setSemesterId] = useState<string | undefined>(undefined);
-  const { data: snap, isLoading } = usePortalSnapshot(semesterId);
+  const { data: snap, isLoading, isError, refetch } = usePortalSnapshot(semesterId);
 
-  if (isLoading || !snap) {
+  if (isLoading) {
     return (
       <div className="grid h-64 place-items-center text-muted-foreground">
         <Loader2 className="h-6 w-6 animate-spin" />
+      </div>
+    );
+  }
+  if (isError || !snap) {
+    return (
+      <div className="space-y-4 rounded-xl border bg-card p-8 text-center">
+        <p className="text-destructive">تعذر تحميل بيانات التسجيل والجدول الدراسي.</p>
+        <Button variant="outline" onClick={() => refetch()}>
+          إعادة المحاولة
+        </Button>
       </div>
     );
   }
@@ -40,6 +59,9 @@ function Registration() {
   const enrollments = snap.enrollments;
   const timetable = snap.timetable;
   const distinctGroups = [...new Set(enrollments.map((e) => e.groupName).filter(Boolean))];
+  const { startHour, endHour } = computeScheduleBounds(timetable);
+  const hours = Array.from({ length: Math.max(1, endHour - startHour) }, (_, i) => startHour + i);
+  const totalMinutes = (endHour - startHour) * 60;
 
   return (
     <div className="space-y-6">
@@ -115,52 +137,58 @@ function Registration() {
           </p>
         ) : (
           <div className="-m-6 overflow-x-auto">
-            <table className="w-full min-w-[960px] border-collapse text-xs" dir="ltr">
-              <thead>
-                <tr className="bg-muted/60">
-                  <th className="w-24 border-b p-3 font-semibold">اليوم</th>
-                  {HOURS.map((h) => (
-                    <th key={h} className="border-b border-l p-3 font-semibold">
-                      {String(h).padStart(2, "0")}:00
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
+            <div className="min-w-[960px] text-xs" dir="ltr">
+              <div className="grid border-b bg-muted/60" style={{ gridTemplateColumns: `96px repeat(${hours.length}, minmax(72px, 1fr))` }}>
+                <div className="p-3 text-center font-semibold">اليوم</div>
+                {hours.map((h) => (
+                  <div key={h} className="border-l p-3 text-center font-semibold">
+                    {String(h).padStart(2, "0")}:00
+                  </div>
+                ))}
+              </div>
+              <div className="divide-y">
                 {DAYS.map(([day, ar]) => {
                   const slots = timetable.filter((s) => s.day === day);
-                  const cells: React.ReactNode[] = [];
-                  for (let h = 8; h < 20; ) {
-                    const s = slots.find((x) => x.start === h);
-                    if (s) {
-                      cells.push(
-                        <td key={h} colSpan={Math.max(1, s.end - s.start)} className="border-b border-l p-1">
-                          <div className={cn("h-full rounded-md p-2 leading-tight", KIND_CLS[s.kind])}>
-                            <div className="font-semibold">
-                              {KIND_LABEL[s.kind]} · {s.course}
-                            </div>
-                            <div className="mt-0.5 opacity-80">{s.staff}</div>
-                            <div className="opacity-80">
-                              {s.room} · {s.groupName}
-                            </div>
-                          </div>
-                        </td>,
-                      );
-                      h = s.end;
-                    } else {
-                      cells.push(<td key={h} className="h-16 border-b border-l" />);
-                      h++;
-                    }
-                  }
                   return (
-                    <tr key={day}>
-                      <td className="border-b bg-muted/40 p-3 text-center font-semibold">{ar}</td>
-                      {cells}
-                    </tr>
+                    <div key={day} className="flex min-h-20 items-stretch">
+                      <div className="flex w-24 shrink-0 items-center justify-center bg-muted/40 p-3 text-center font-semibold">
+                        {ar}
+                      </div>
+                      <div className="relative flex-1 border-l">
+                        <div className="grid h-full" style={{ gridTemplateColumns: `repeat(${hours.length}, minmax(72px, 1fr))` }}>
+                          {hours.map((h) => (
+                            <div key={h} className="min-h-20 border-l first:border-l-0" />
+                          ))}
+                        </div>
+                        {slots.map((s) => {
+                          const leftPct = Math.max(0, ((s.startMinutes - startHour * 60) / totalMinutes) * 100);
+                          const widthPct = Math.max(4, ((s.endMinutes - s.startMinutes) / totalMinutes) * 100);
+                          return (
+                            <div
+                              key={s.id}
+                              style={{ left: `${leftPct}%`, width: `${widthPct}%` }}
+                              className="absolute inset-y-1 p-0.5"
+                            >
+                              <div className={cn("h-full overflow-hidden rounded-md p-2 leading-tight shadow-xs", KIND_CLS[s.kind])}>
+                                <div className="truncate font-semibold">
+                                  {KIND_LABEL[s.kind]} · {s.course}
+                                </div>
+                                <div className="mt-0.5 truncate font-mono text-[0.7rem] opacity-90">
+                                  {s.startTime}–{s.endTime}
+                                </div>
+                                <div className="truncate opacity-80">
+                                  {s.staff} · {s.room} ({s.groupName})
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
                   );
                 })}
-              </tbody>
-            </table>
+              </div>
+            </div>
           </div>
         )}
       </Card>

@@ -19,6 +19,7 @@ import {
   getAcademicCatalog,
 } from "@/lib/admin.functions";
 import { DAYS, KIND_LABEL, type SlotKind } from "@/lib/portal-data";
+import { formatTimeDisplay } from "@/lib/auth-helpers";
 
 export const Route = createFileRoute("/admin/academic")({
   component: AdminAcademicPage,
@@ -56,8 +57,8 @@ function AdminAcademicPage() {
   const [gInstructor, setGInstructor] = useState("");
   const [lecGroupId, setLecGroupId] = useState("");
   const [lecDay, setLecDay] = useState<"Saturday" | "Sunday" | "Monday" | "Tuesday" | "Wednesday" | "Thursday">("Saturday");
-  const [lecStart, setLecStart] = useState("8");
-  const [lecEnd, setLecEnd] = useState("10");
+  const [lecStart, setLecStart] = useState("08:00");
+  const [lecEnd, setLecEnd] = useState("10:00");
   const [lecKind, setLecKind] = useState<SlotKind>("lecture");
   const [lecLocation, setLecLocation] = useState("");
   const [lecInstructor, setLecInstructor] = useState("");
@@ -66,6 +67,16 @@ function AdminAcademicPage() {
     return (
       <div className="grid h-64 place-items-center text-muted-foreground">
         <Loader2 className="h-6 w-6 animate-spin" />
+      </div>
+    );
+  }
+  if (catalog.isError) {
+    return (
+      <div className="space-y-4 rounded-xl border bg-card p-8 text-center">
+        <p className="text-destructive">تعذر تحميل الكتالوج الأكاديمي من الخادم.</p>
+        <Button variant="outline" onClick={() => catalog.refetch()}>
+          إعادة المحاولة
+        </Button>
       </div>
     );
   }
@@ -340,8 +351,8 @@ function AdminAcademicPage() {
                 data: {
                   group_id: lecGroupId,
                   day_of_week: lecDay,
-                  start_hour: Number(lecStart),
-                  end_hour: Number(lecEnd),
+                  start_time: lecStart,
+                  end_time: lecEnd,
                   kind: lecKind,
                   location: lecLocation,
                   instructor: lecInstructor,
@@ -377,8 +388,8 @@ function AdminAcademicPage() {
             ))}
           </select>
           <div className="grid grid-cols-2 gap-2">
-            <Input value={lecStart} onChange={(e) => setLecStart(e.target.value)} type="number" min="6" max="22" placeholder="من" dir="ltr" required />
-            <Input value={lecEnd} onChange={(e) => setLecEnd(e.target.value)} type="number" min="7" max="23" placeholder="إلى" dir="ltr" required />
+            <Input value={lecStart} onChange={(e) => setLecStart(e.target.value)} type="time" step="300" aria-label="وقت البدء" dir="ltr" required />
+            <Input value={lecEnd} onChange={(e) => setLecEnd(e.target.value)} type="time" step="300" aria-label="وقت الانتهاء" dir="ltr" required />
           </div>
           <select className="rounded-lg border bg-background px-3 py-2 text-sm" value={lecKind} onChange={(e) => setLecKind(e.target.value as SlotKind)}>
             {(Object.keys(KIND_LABEL) as SlotKind[]).map((k) => (
@@ -407,8 +418,8 @@ function AdminAcademicPage() {
                   <div>
                     <span className="font-medium">{crs ? `${crs.code} — ${crs.name}` : ""}</span>
                     <span className="mx-2 text-xs text-muted-foreground">
-                      ({grp?.name}) · {DAYS.find((d) => d[0] === lec.day_of_week)?.[1]} · {lec.start_hour}:00–{lec.end_hour}:00 ·{" "}
-                      {KIND_LABEL[lec.kind]} · {lec.location}
+                      ({grp?.name}) · {DAYS.find((d) => d[0] === lec.day_of_week)?.[1]} · {formatTimeDisplay(lec.start_time, lec.start_hour)}–
+                      {formatTimeDisplay(lec.end_time, lec.end_hour)} · {KIND_LABEL[lec.kind]} · {lec.location}
                     </span>
                   </div>
                   <Button

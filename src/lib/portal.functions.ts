@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { formatTimeDisplay, parseTimeToMinutes } from "./auth-helpers";
 
 export const getStudentPortalSnapshot = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
@@ -9,38 +10,32 @@ export const getStudentPortalSnapshot = createServerFn({ method: "GET" })
   )
   .handler(async ({ context, data }) => {
     const { matchesStudentAudience, requireActiveStudentServer } = await import("./auth.server");
-    let db = context.supabase;
-    if (process.env["SUPABASE_SERVICE_ROLE_KEY"]) {
-      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-      db = supabaseAdmin;
-    }
+    // Student-facing reads MUST execute through the user-scoped JWT client so PostgreSQL RLS is enforced.
+    const db = context.supabase;
 
     const student = await requireActiveStudentServer(context.userId, db);
 
     const [
-      { data: programRow },
-      { data: levelRow },
-      { data: yearRow },
-      { data: semesters },
-      { data: enrollments },
-      { data: announcements },
-      { data: events },
-      { data: grades },
-      { data: gradeSummaries },
+      progRes,
+      lvlRes,
+      yearRes,
+      semRes,
+      enrRes,
+      annRes,
+      evRes,
+      gradeRes,
+      sumRes,
     ] = await Promise.all([
       student.program_id
         ? db.from("academic_programs").select("*").eq("id", student.program_id).maybeSingle()
-        : Promise.resolve({ data: null }),
+        : Promise.resolve({ data: null, error: null }),
       student.level_id
         ? db.from("academic_levels").select("*").eq("id", student.level_id).maybeSingle()
-        : Promise.resolve({ data: null }),
+        : Promise.resolve({ data: null, error: null }),
       student.academic_year_id
         ? db.from("academic_years").select("*").eq("id", student.academic_year_id).maybeSingle()
-        : Promise.resolve({ data: null }),
-      db
-        .from("semesters")
-        .select("*, academic_years(name)")
-        .order("created_at", { ascending: false }),
+        : Promise.resolve({ data: null, error: null }),
+      db.from("semesters").select("*, academic_years(name)").order("created_at", { ascending: false }),
       db
         .from("enrollments")
         .select("*")
@@ -70,58 +65,84 @@ export const getStudentPortalSnapshot = createServerFn({ method: "GET" })
         .eq("is_published", true),
     ]);
 
-    const semesterList = semesters ?? [];
+    const firstError =
+      progRes.error ||
+      lvlRes.error ||
+      yearRes.error ||
+      semRes.error ||
+      enrRes.error ||
+      annRes.error ||
+      evRes.error ||
+      gradeRes.error ||
+      sumRes.error;
+
+    if (firstError) {
+      console.error("[portal] snapshot primary query failed", { code: firstError.code });
+      throw new Error("تعذر تحميل البيانات الأكاديمية من قاعدة البيانات");
+    }
+
+    const semesters = semRes.data ?? [];
+    const enrollments = enrRes.data ?? [];
+    const announcements = annRes.data ?? [];
+    const events = evRes.data ?? [];
+    const grades = gradeRes.data ?? [];
+    const gradeSummaries = sumRes.data ?? [];
+
     const selectedSemester =
-      (data?.semesterId ? semesterList.find((s) => s.id === data.semesterId) : undefined) ??
-      semesterList.find((s) => s.is_current) ??
-      semesterList[0] ??
+      (data?.semesterId ? semesters.find((s) => s.id === data.semesterId) : undefined) ??
+      semesters.find((s) => s.is_current) ??
+      semesters[0] ??
       null;
 
-    // Resolve enrolled courses, offerings, groups, and lectures from PostgreSQL
-    const enrollmentRows = enrollments ?? [];
-    const offeringIds = [...new Set(enrollmentRows.map((e) => e.offering_id))];
-    const groupIds = [...new Set(enrollmentRows.map((e) => e.group_id))];
+    // Resolve enrolled courses, offerings, groups, and lectures under RLS
+    const offeringIds = [...new Set(enrollments.map((e) => e.offering_id))];
+    const groupIds = [...new Set(enrollments.map((e) => e.group_id))];
 
-    const [{ data: offerings }, { data: groups }, { data: lectures }] = await Promise.all([
+    const [offRes, grpRes, lecRes] = await Promise.all([
       offeringIds.length > 0
         ? db.from("course_offerings").select("*").in("id", offeringIds)
-        : Promise.resolve({ data: [] }),
+        : Promise.resolve({ data: [], error: null }),
       groupIds.length > 0
         ? db.from("academic_groups").select("*").in("id", groupIds)
-        : Promise.resolve({ data: [] }),
+        : Promise.resolve({ data: [], error: null }),
       groupIds.length > 0
-        ? db
-            .from("lectures")
-            .select("*")
-            .in("group_id", groupIds)
-            .order("start_hour", { ascending: true })
-        : Promise.resolve({ data: [] }),
+        ? db.from("lectures").select("*").in("group_id", groupIds).order("start_time", { ascending: true })
+        : Promise.resolve({ data: [], error: null }),
     ]);
 
-    const courseIds = [
-      ...new Set([
-        ...(offerings ?? []).map((o) => o.course_id),
-        ...(grades ?? []).map((g) => g.course_id),
-      ]),
-    ];
-    const { data: courses } =
+    if (offRes.error || grpRes.error || lecRes.error) {
+      const err = offRes.error || grpRes.error || lecRes.error;
+      console.error("[portal] snapshot detail query failed", { code: err?.code });
+      throw new Error("تعذر تحميل تفاصيل المقررات والجدول الدراسي");
+    }
+
+    const offerings = offRes.data ?? [];
+    const groups = grpRes.data ?? [];
+    const lectures = lecRes.data ?? [];
+
+    const courseIds = [...new Set([...offerings.map((o) => o.course_id), ...grades.map((g) => g.course_id)])];
+    const courseRes =
       courseIds.length > 0
         ? await db.from("courses").select("*").in("id", courseIds)
-        : { data: [] };
+        : { data: [], error: null };
 
-    const courseMap = new Map((courses ?? []).map((c) => [c.id, c]));
-    const offeringMap = new Map((offerings ?? []).map((o) => [o.id, o]));
-    const groupMap = new Map((groups ?? []).map((g) => [g.id, g]));
-    const semesterMap = new Map(semesterList.map((s) => [s.id, s]));
+    if (courseRes.error) {
+      console.error("[portal] courses lookup failed", { code: courseRes.error.code });
+      throw new Error("تعذر تحميل بيانات المقررات الدراسية");
+    }
 
-    // Filter enrollments for selected semester if one exists
-    const activeEnrollments = enrollmentRows
+    const courseMap = new Map((courseRes.data ?? []).map((c) => [c.id, c]));
+    const offeringMap = new Map(offerings.map((o) => [o.id, o]));
+    const groupMap = new Map(groups.map((g) => [g.id, g]));
+    const semesterMap = new Map(semesters.map((s) => [s.id, s]));
+
+    const activeEnrollments = enrollments
       .map((e) => {
         const off = offeringMap.get(e.offering_id);
         const grp = groupMap.get(e.group_id);
         const crs = off ? courseMap.get(off.course_id) : undefined;
         const sem = off ? semesterMap.get(off.semester_id) : undefined;
-        const grpLectures = (lectures ?? []).filter((l) => l.group_id === e.group_id);
+        const grpLectures = lectures.filter((l) => l.group_id === e.group_id);
         return {
           enrollmentId: e.id,
           status: e.status,
@@ -142,27 +163,32 @@ export const getStudentPortalSnapshot = createServerFn({ method: "GET" })
       .filter((item) => (!selectedSemester ? true : item.semesterId === selectedSemester.id));
 
     const timetableSlots = activeEnrollments.flatMap((enr) =>
-      enr.lectures.map((lec) => ({
-        id: lec.id,
-        day: lec.day_of_week,
-        start: lec.start_hour,
-        end: lec.end_hour,
-        kind: lec.kind,
-        course: enr.courseName,
-        courseCode: enr.courseCode,
-        groupName: enr.groupName,
-        staff: lec.instructor || enr.instructor || "—",
-        room: lec.location,
-      })),
+      enr.lectures.map((lec) => {
+        const startTime = formatTimeDisplay(lec.start_time, lec.start_hour);
+        const endTime = formatTimeDisplay(lec.end_time, lec.end_hour);
+        return {
+          id: lec.id,
+          day: lec.day_of_week,
+          start: lec.start_hour,
+          end: lec.end_hour,
+          startTime,
+          endTime,
+          startMinutes: parseTimeToMinutes(startTime, lec.start_hour),
+          endMinutes: parseTimeToMinutes(endTime, lec.end_hour),
+          kind: lec.kind,
+          course: enr.courseName,
+          courseCode: enr.courseCode,
+          groupName: enr.groupName,
+          staff: lec.instructor || enr.instructor || "—",
+          room: lec.location,
+        };
+      }),
     );
 
-    const targetedAnnouncements = (announcements ?? []).filter((a) =>
-      matchesStudentAudience(a, student),
-    );
-    const targetedEvents = (events ?? []).filter((ev) => matchesStudentAudience(ev, student));
+    const targetedAnnouncements = announcements.filter((a) => matchesStudentAudience(a, student));
+    const targetedEvents = events.filter((ev) => matchesStudentAudience(ev, student));
 
-    // Group published grades by semester
-    const publishedGrades = (grades ?? []).map((g) => {
+    const publishedGrades = grades.map((g) => {
       const crs = courseMap.get(g.course_id);
       const sem = semesterMap.get(g.semester_id);
       return {
@@ -172,27 +198,26 @@ export const getStudentPortalSnapshot = createServerFn({ method: "GET" })
         creditHours: crs?.credit_hours ?? 0,
         semesterName: sem?.name_ar ?? "—",
         semesterSeason: sem?.season ?? "",
-        academicYearName:
-          (sem as { academic_years?: { name?: string } } | undefined)?.academic_years?.name ?? "",
+        academicYearName: (sem as { academic_years?: { name?: string } } | undefined)?.academic_years?.name ?? "",
       };
     });
 
     return {
       profile: {
         ...student,
-        resolvedProgramName: programRow?.name_ar ?? student.program,
-        resolvedFacultyName: programRow?.faculty ?? student.faculty,
-        resolvedLevelName: levelRow?.name_ar ?? student.academic_level,
-        resolvedYearName: yearRow?.name ?? student.academic_year,
+        resolvedProgramName: progRes.data?.name_ar ?? student.program,
+        resolvedFacultyName: progRes.data?.faculty ?? student.faculty,
+        resolvedLevelName: lvlRes.data?.name_ar ?? student.academic_level,
+        resolvedYearName: yearRes.data?.name ?? student.academic_year,
       },
-      semesters: semesterList,
+      semesters,
       selectedSemester,
       enrollments: activeEnrollments,
       timetable: timetableSlots,
       announcements: targetedAnnouncements,
       events: targetedEvents,
       grades: publishedGrades,
-      gradeSummaries: gradeSummaries ?? [],
+      gradeSummaries,
     };
   });
 
@@ -200,30 +225,23 @@ export const getStudentDocumentsBundle = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { matchesStudentAudience, requireActiveStudentServer } = await import("./auth.server");
-    let db = context.supabase;
-    if (process.env["SUPABASE_SERVICE_ROLE_KEY"]) {
-      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-      db = supabaseAdmin;
-    }
+    const db = context.supabase;
 
     const student = await requireActiveStudentServer(context.userId, db);
 
-    const [{ data: sharedDocs, error: sharedErr }, { data: privateDocs, error: privErr }] =
-      await Promise.all([
-        db
-          .from("documents")
-          .select("*")
-          .eq("is_available", true)
-          .order("sort_order", { ascending: true }),
-        db
-          .from("student_documents")
-          .select("*")
-          .eq("student_user_id", student.user_id)
-          .eq("is_available", true)
-          .order("created_at", { ascending: false }),
-      ]);
+    const [{ data: sharedDocs, error: sharedErr }, { data: privateDocs, error: privErr }] = await Promise.all([
+      db.from("documents").select("*").eq("is_available", true).order("sort_order", { ascending: true }),
+      db
+        .from("student_documents")
+        .select("*")
+        .eq("student_user_id", student.user_id)
+        .eq("is_available", true)
+        .order("created_at", { ascending: false }),
+    ]);
 
-    if (sharedErr && privErr) {
+    if (sharedErr || privErr) {
+      const err = sharedErr || privErr;
+      console.error("[portal] documents bundle query failed", { code: err?.code });
       throw new Error("تعذر تحميل الملفات من قاعدة البيانات");
     }
 

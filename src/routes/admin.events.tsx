@@ -113,6 +113,16 @@ function AdminEventsPage() {
       </div>
     );
   }
+  if (comms.isError || catalog.isError) {
+    return (
+      <div className="space-y-4 rounded-xl border bg-card p-8 text-center">
+        <p className="text-destructive">تعذر تحميل بيانات الإعلانات والفعاليات من الخادم.</p>
+        <Button variant="outline" onClick={() => { comms.refetch(); catalog.refetch(); }}>
+          إعادة المحاولة
+        </Button>
+      </div>
+    );
+  }
 
   const programs = catalog.data?.programs ?? [];
   const levels = catalog.data?.levels ?? [];

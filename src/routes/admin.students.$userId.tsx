@@ -22,6 +22,7 @@ import {
   adminEnrollStudent,
   adminRemoveEnrollment,
   adminSetStudentAccountStatus,
+  adminUpdateEnrollmentStatus,
   adminUpdateStudentProfile,
   adminUpsertStudentGrade,
   getAcademicCatalog,
@@ -348,29 +349,50 @@ function AdminStudentDetail() {
               const off = offeringMap.get(enr.offering_id);
               const crs = off ? courseMap.get(off.course_id) : undefined;
               const grp = groupMap.get(enr.group_id);
+              const statusLabel = enr.status === "dropped" ? "منسحب" : enr.status === "completed" ? "مكتمل" : "مسجل";
               return (
-                <div key={enr.id} className="flex items-center justify-between py-3">
+                <div key={enr.id} className="flex flex-wrap items-center justify-between gap-2 py-3">
                   <div>
                     <span className="font-medium">{crs ? `${crs.code} — ${crs.name}` : enr.offering_id}</span>
                     <span className="mx-2 text-muted-foreground">·</span>
                     <span className="font-mono text-xs">{grp?.name ?? enr.group_id}</span>
+                    <span className="mx-2 rounded-full bg-secondary px-2 py-0.5 text-xs">{statusLabel}</span>
                   </div>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="text-destructive"
-                    onClick={async () => {
-                      try {
-                        await adminRemoveEnrollment({ data: { id: enr.id } });
-                        await refresh();
-                        toast.success("تم إلغاء التسجيل");
-                      } catch (err) {
-                        toast.error(err instanceof Error ? err.message : "تعذر إلغاء التسجيل");
-                      }
-                    }}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                  <div className="flex items-center gap-1">
+                    {enr.status === "enrolled" && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={async () => {
+                          try {
+                            await adminUpdateEnrollmentStatus({ data: { id: enr.id, status: "dropped" } });
+                            await refresh();
+                            toast.success("تم تسجيل الانسحاب مع الاحتفاظ بالسجل التاريخي");
+                          } catch (err) {
+                            toast.error(err instanceof Error ? err.message : "تعذر التحديث");
+                          }
+                        }}
+                      >
+                        إسقاط (حفظ بالسجل)
+                      </Button>
+                    )}
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="text-destructive"
+                      onClick={async () => {
+                        try {
+                          await adminRemoveEnrollment({ data: { id: enr.id } });
+                          await refresh();
+                          toast.success("تم حذف التسجيل");
+                        } catch (err) {
+                          toast.error(err instanceof Error ? err.message : "تعذر إلغاء التسجيل");
+                        }
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
               );
             })}

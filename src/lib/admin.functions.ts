@@ -1,8 +1,28 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { normalizeEmail, normalizeStudentCode, normalizeTimeString, parseTimeToMinutes } from "./auth-helpers";
 
 const audienceSchema = z.enum(["all", "program", "level", "student"]);
+
+async function assertProgramLevelMatch(
+  programId: string | null | undefined,
+  levelId: string | null | undefined,
+) {
+  if (!levelId) return;
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { data: lvl, error } = await supabaseAdmin
+    .from("academic_levels")
+    .select("id, program_id")
+    .eq("id", levelId)
+    .maybeSingle();
+  if (error || !lvl) {
+    throw new Error("المستوى الأكاديمي المختار غير موجود");
+  }
+  if (programId && lvl.program_id !== programId) {
+    throw new Error("المستوى الأكاديمي لا يتبع البرنامج الأكاديمي المحدد");
+  }
+}
 
 export const getAdminOverview = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
@@ -100,9 +120,11 @@ export const adminUpsertRosterEntry = createServerFn({ method: "POST" })
     const { logAdminActivity, requireAdminServer } = await import("./auth.server");
     const admin = await requireAdminServer(context.userId);
 
+    await assertProgramLevelMatch(data.program_id, data.level_id);
+
     const payload = {
-      student_code: data.student_code,
-      approved_email: data.approved_email.toLowerCase(),
+      student_code: normalizeStudentCode(data.student_code),
+      approved_email: normalizeEmail(data.approved_email),
       full_name_ar: data.full_name_ar || null,
       full_name_en: data.full_name_en || null,
       program_id: data.program_id,
@@ -154,110 +176,35 @@ export const adminDeleteRosterEntry = createServerFn({ method: "POST" })
 
 export const adminApproveRegistration = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d: unknown) => z.object({ requestId: z.string().uuid() }).parse(d))
+  .inputValidator((d: unknown) =>
+    z
+      .object({
+        requestId: z.string().uuid(),
+        programId: z.string().uuid().nullable().optional(),
+        levelId: z.string().uuid().nullable().optional(),
+        academicYearId: z.string().uuid().nullable().optional(),
+      })
+      .parse(d),
+  )
   .handler(async ({ context, data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { logAdminActivity, requireAdminServer } = await import("./auth.server");
+    const { requireAdminServer } = await import("./auth.server");
     const admin = await requireAdminServer(context.userId);
 
-    const { data: reqRow, error: reqErr } = await supabaseAdmin
-      .from("registration_requests")
-      .select("*")
-      .eq("id", data.requestId)
-      .maybeSingle();
+    await assertProgramLevelMatch(data.programId, data.levelId);
 
-    if (reqErr || !reqRow) throw new Error("طلب التسجيل غير موجود");
-
-    const { data: duplicateCode } = await supabaseAdmin
-      .from("student_profiles")
-      .select("user_id")
-      .eq("student_code", reqRow.student_code)
-      .neq("user_id", reqRow.auth_user_id)
-      .maybeSingle();
-    if (duplicateCode) {
-      throw new Error("يوجد ملف طالب آخر مرتبط بالفعل بهذا الرقم الجامعي");
-    }
-
-    let programName: string | null = null;
-    let facultyName: string | null = null;
-    let levelName: string | null = null;
-    let rosterProgramId: string | null = null;
-    let rosterLevelId: string | null = null;
-
-    if (reqRow.roster_id) {
-      const { data: roster } = await supabaseAdmin
-        .from("student_roster")
-        .select("program_id, level_id")
-        .eq("id", reqRow.roster_id)
-        .maybeSingle();
-      rosterProgramId = roster?.program_id ?? null;
-      rosterLevelId = roster?.level_id ?? null;
-    }
-
-    if (rosterProgramId) {
-      const { data: prog } = await supabaseAdmin
-        .from("academic_programs")
-        .select("name_ar, faculty")
-        .eq("id", rosterProgramId)
-        .maybeSingle();
-      programName = prog?.name_ar ?? null;
-      facultyName = prog?.faculty ?? null;
-    }
-    if (rosterLevelId) {
-      const { data: lvl } = await supabaseAdmin
-        .from("academic_levels")
-        .select("name_ar")
-        .eq("id", rosterLevelId)
-        .maybeSingle();
-      levelName = lvl?.name_ar ?? null;
-    }
-
-    const { error: profErr } = await supabaseAdmin.from("student_profiles").upsert(
-      {
-        user_id: reqRow.auth_user_id,
-        username: reqRow.student_code,
-        student_code: reqRow.student_code,
-        email: reqRow.email,
-        full_name_ar: reqRow.full_name_ar,
-        full_name_en: reqRow.full_name_en,
-        phone: reqRow.phone,
-        gender: reqRow.gender,
-        program_id: rosterProgramId,
-        level_id: rosterLevelId,
-        program: programName,
-        faculty: facultyName,
-        academic_level: levelName,
-        academic_status: "مقيد — منتظم",
-        account_status: "active",
-      },
-      { onConflict: "user_id" },
-    );
-    if (profErr) throw new Error(profErr.message || "تعذر إنشاء ملف الطالب");
-
-    const { error: roleErr } = await supabaseAdmin
-      .from("user_roles")
-      .upsert({ user_id: reqRow.auth_user_id, role: "student" }, { onConflict: "user_id,role" });
-    if (roleErr) throw new Error("تعذر تعيين دور الطالب");
-
-    const { error: updErr } = await supabaseAdmin
-      .from("registration_requests")
-      .update({
-        status: "active",
-        rejection_reason: null,
-        reviewed_by: admin.userId,
-        reviewed_at: new Date().toISOString(),
-      })
-      .eq("id", reqRow.id);
-    if (updErr) throw new Error("تعذر تحديث حالة طلب التسجيل");
-
-    await logAdminActivity({
-      actorUserId: admin.userId,
-      actorLabel: admin.actorLabel,
-      action: "approve_registration",
-      entityType: "registration_requests",
-      entityId: reqRow.id,
-      metadata: { student_code: reqRow.student_code },
+    const { error } = await supabaseAdmin.rpc("admin_approve_registration_atomic", {
+      _request_id: data.requestId,
+      _actor_user_id: admin.userId,
+      _actor_label: admin.actorLabel,
+      _program_id: data.programId ?? null,
+      _level_id: data.levelId ?? null,
+      _academic_year_id: data.academicYearId ?? null,
     });
+
+    if (error) {
+      throw new Error(error.message || "تعذر اعتماد طلب التسجيل بشكل ذري");
+    }
 
     return { ok: true as const };
   });
@@ -269,37 +216,19 @@ export const adminRejectRegistration = createServerFn({ method: "POST" })
   )
   .handler(async ({ context, data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { logAdminActivity, requireAdminServer } = await import("./auth.server");
+    const { requireAdminServer } = await import("./auth.server");
     const admin = await requireAdminServer(context.userId);
 
-    const { data: reqRow, error } = await supabaseAdmin
-      .from("registration_requests")
-      .update({
-        status: "rejected",
-        rejection_reason: data.reason || null,
-        reviewed_by: admin.userId,
-        reviewed_at: new Date().toISOString(),
-      })
-      .eq("id", data.requestId)
-      .select("*")
-      .single();
-
-    if (error || !reqRow) throw new Error("تعذر رفض الطلب");
-
-    await supabaseAdmin
-      .from("user_roles")
-      .delete()
-      .eq("user_id", reqRow.auth_user_id)
-      .eq("role", "student");
-
-    await logAdminActivity({
-      actorUserId: admin.userId,
-      actorLabel: admin.actorLabel,
-      action: "reject_registration",
-      entityType: "registration_requests",
-      entityId: reqRow.id,
-      metadata: { student_code: reqRow.student_code },
+    const { error } = await supabaseAdmin.rpc("admin_reject_registration_atomic", {
+      _request_id: data.requestId,
+      _actor_user_id: admin.userId,
+      _actor_label: admin.actorLabel,
+      _reason: data.reason ?? null,
     });
+
+    if (error) {
+      throw new Error(error.message || "تعذر رفض طلب التسجيل");
+    }
 
     return { ok: true as const };
   });
@@ -360,10 +289,10 @@ export const getAdminStudentDetail = createServerFn({ method: "GET" })
 
     const [
       { data: profile, error: pErr },
-      { data: privateDocs },
-      { data: enrollments },
-      { data: grades },
-      { data: summaries },
+      { data: privateDocs, error: docErr },
+      { data: enrollments, error: enrErr },
+      { data: grades, error: gradeErr },
+      { data: summaries, error: sumErr },
     ] = await Promise.all([
       supabaseAdmin.from("student_profiles").select("*").eq("user_id", data.userId).maybeSingle(),
       supabaseAdmin
@@ -387,7 +316,10 @@ export const getAdminStudentDetail = createServerFn({ method: "GET" })
         .eq("student_user_id", data.userId),
     ]);
 
-    if (pErr || !profile) throw new Error("ملف الطالب غير موجود");
+    if (pErr || docErr || enrErr || gradeErr || sumErr) {
+      throw new Error("تعذر تحميل تفاصيل سجل الطالب من قاعدة البيانات");
+    }
+    if (!profile) throw new Error("ملف الطالب غير موجود");
 
     return {
       profile,
@@ -422,12 +354,15 @@ export const adminUpdateStudentProfile = createServerFn({ method: "POST" })
     const { logAdminActivity, requireAdminServer } = await import("./auth.server");
     const admin = await requireAdminServer(context.userId);
 
-    const { data: dup } = await supabaseAdmin
+    await assertProgramLevelMatch(data.program_id, data.level_id);
+
+    const { data: dup, error: dupErr } = await supabaseAdmin
       .from("student_profiles")
       .select("user_id")
       .eq("student_code", data.student_code)
       .neq("user_id", data.user_id)
       .maybeSingle();
+    if (dupErr) throw new Error("تعذر التحقق من عدم تكرار الرقم الجامعي");
     if (dup) throw new Error("الرقم الجامعي مستخدم بالفعل لطالب آخر");
 
     let programName: string | null = null;
@@ -506,37 +441,22 @@ export const adminSetStudentAccountStatus = createServerFn({ method: "POST" })
     z.object({
       userId: z.string().uuid(),
       status: z.enum(["active", "suspended", "pending", "rejected"]),
+      reason: z.string().trim().max(500).optional(),
     }).parse(d),
   )
   .handler(async ({ context, data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { logAdminActivity, requireAdminServer } = await import("./auth.server");
+    const { requireAdminServer } = await import("./auth.server");
     const admin = await requireAdminServer(context.userId);
 
-    const { error } = await supabaseAdmin
-      .from("student_profiles")
-      .update({ account_status: data.status })
-      .eq("user_id", data.userId);
-    if (error) throw new Error("تعذر تحديث حالة الحساب");
-
-    await supabaseAdmin
-      .from("registration_requests")
-      .update({ status: data.status, reviewed_by: admin.userId, reviewed_at: new Date().toISOString() })
-      .eq("auth_user_id", data.userId);
-
-    if (data.status === "active") {
-      await supabaseAdmin
-        .from("user_roles")
-        .upsert({ user_id: data.userId, role: "student" }, { onConflict: "user_id,role" });
-    }
-
-    await logAdminActivity({
-      actorUserId: admin.userId,
-      actorLabel: admin.actorLabel,
-      action: `set_account_status_${data.status}`,
-      entityType: "student_profiles",
-      entityId: data.userId,
+    const { error } = await supabaseAdmin.rpc("admin_set_account_status_atomic", {
+      _target_user_id: data.userId,
+      _new_status: data.status,
+      _actor_user_id: admin.userId,
+      _actor_label: admin.actorLabel,
+      _reason: data.reason ?? null,
     });
+    if (error) throw new Error(error.message || "تعذر تحديث حالة الحساب");
 
     return { ok: true as const };
   });
@@ -549,14 +469,14 @@ export const getAcademicCatalog = createServerFn({ method: "GET" })
     await requireAdminServer(context.userId);
 
     const [
-      { data: programs },
-      { data: levels },
-      { data: years },
-      { data: semesters },
-      { data: courses },
-      { data: offerings },
-      { data: groups },
-      { data: lectures },
+      { data: programs, error: e1 },
+      { data: levels, error: e2 },
+      { data: years, error: e3 },
+      { data: semesters, error: e4 },
+      { data: courses, error: e5 },
+      { data: offerings, error: e6 },
+      { data: groups, error: e7 },
+      { data: lectures, error: e8 },
     ] = await Promise.all([
       supabaseAdmin.from("academic_programs").select("*").order("name_ar"),
       supabaseAdmin.from("academic_levels").select("*").order("level_number"),
@@ -565,8 +485,14 @@ export const getAcademicCatalog = createServerFn({ method: "GET" })
       supabaseAdmin.from("courses").select("*").order("code"),
       supabaseAdmin.from("course_offerings").select("*").order("created_at", { ascending: false }),
       supabaseAdmin.from("academic_groups").select("*").order("name"),
-      supabaseAdmin.from("lectures").select("*").order("day_of_week").order("start_hour"),
+      supabaseAdmin.from("lectures").select("*").order("day_of_week").order("start_time"),
     ]);
+
+    if (e1 || e2 || e3 || e4 || e5 || e6 || e7 || e8) {
+      const err = e1 || e2 || e3 || e4 || e5 || e6 || e7 || e8;
+      console.error("[admin] getAcademicCatalog query failed", { code: err?.code });
+      throw new Error("تعذر تحميل الكتالوج الأكاديمي من قاعدة البيانات");
+    }
 
     return {
       programs: programs ?? [],
@@ -663,25 +589,18 @@ export const adminUpsertAcademicYear = createServerFn({ method: "POST" })
   )
   .handler(async ({ context, data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { logAdminActivity, requireAdminServer } = await import("./auth.server");
+    const { requireAdminServer } = await import("./auth.server");
     const admin = await requireAdminServer(context.userId);
 
-    if (data.is_current) {
-      await supabaseAdmin.from("academic_years").update({ is_current: false }).neq("id", "00000000-0000-0000-0000-000000000000");
-    }
-    const res = data.id
-      ? await supabaseAdmin.from("academic_years").update({ name: data.name, is_current: data.is_current }).eq("id", data.id).select("*").single()
-      : await supabaseAdmin.from("academic_years").insert({ name: data.name, is_current: data.is_current }).select("*").single();
-    if (res.error || !res.data) throw new Error(res.error?.message || "تعذر حفظ العام الأكاديمي");
-
-    await logAdminActivity({
-      actorUserId: admin.userId,
-      actorLabel: admin.actorLabel,
-      action: data.id ? "update_academic_year" : "create_academic_year",
-      entityType: "academic_years",
-      entityId: res.data.id,
+    const { data: saved, error } = await supabaseAdmin.rpc("admin_upsert_academic_year_atomic", {
+      _id: data.id ?? null,
+      _name: data.name,
+      _is_current: data.is_current,
+      _actor_user_id: admin.userId,
+      _actor_label: admin.actorLabel,
     });
-    return res.data;
+    if (error || !saved) throw new Error(error?.message || "تعذر حفظ العام الأكاديمي");
+    return saved;
   });
 
 export const adminUpsertSemester = createServerFn({ method: "POST" })
@@ -698,32 +617,21 @@ export const adminUpsertSemester = createServerFn({ method: "POST" })
   )
   .handler(async ({ context, data }) => {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { logAdminActivity, requireAdminServer } = await import("./auth.server");
+    const { requireAdminServer } = await import("./auth.server");
     const admin = await requireAdminServer(context.userId);
 
-    if (data.is_current) {
-      await supabaseAdmin.from("semesters").update({ is_current: false }).neq("id", "00000000-0000-0000-0000-000000000000");
-    }
-    const payload = {
-      academic_year_id: data.academic_year_id,
-      season: data.season,
-      name_ar: data.name_ar,
-      is_current: data.is_current,
-      is_closed: data.is_closed,
-    };
-    const res = data.id
-      ? await supabaseAdmin.from("semesters").update(payload).eq("id", data.id).select("*").single()
-      : await supabaseAdmin.from("semesters").insert(payload).select("*").single();
-    if (res.error || !res.data) throw new Error(res.error?.message || "تعذر حفظ الفصل الدراسي");
-
-    await logAdminActivity({
-      actorUserId: admin.userId,
-      actorLabel: admin.actorLabel,
-      action: data.id ? "update_semester" : "create_semester",
-      entityType: "semesters",
-      entityId: res.data.id,
+    const { data: saved, error } = await supabaseAdmin.rpc("admin_upsert_semester_atomic", {
+      _id: data.id ?? null,
+      _academic_year_id: data.academic_year_id,
+      _season: data.season,
+      _name_ar: data.name_ar,
+      _is_current: data.is_current,
+      _is_closed: data.is_closed,
+      _actor_user_id: admin.userId,
+      _actor_label: admin.actorLabel,
     });
-    return res.data;
+    if (error || !saved) throw new Error(error?.message || "تعذر حفظ الفصل الدراسي");
+    return saved;
   });
 
 export const adminUpsertCourse = createServerFn({ method: "POST" })
@@ -782,6 +690,8 @@ export const adminUpsertOffering = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { logAdminActivity, requireAdminServer } = await import("./auth.server");
     const admin = await requireAdminServer(context.userId);
+
+    await assertProgramLevelMatch(data.program_id, data.level_id);
 
     const payload = {
       course_id: data.course_id,
@@ -857,32 +767,53 @@ export const adminEnrollStudent = createServerFn({ method: "POST" })
     const { logAdminActivity, requireAdminServer } = await import("./auth.server");
     const admin = await requireAdminServer(context.userId);
 
-    // Ensure group belongs to the same offering
-    const { data: grp } = await supabaseAdmin
-      .from("academic_groups")
-      .select("id, offering_id")
-      .eq("id", data.group_id)
-      .maybeSingle();
+    const [{ data: grp, error: grpErr }, { data: off, error: offErr }, { data: stu, error: stuErr }] = await Promise.all([
+      supabaseAdmin.from("academic_groups").select("id, offering_id").eq("id", data.group_id).maybeSingle(),
+      supabaseAdmin.from("course_offerings").select("id, program_id, level_id").eq("id", data.offering_id).maybeSingle(),
+      supabaseAdmin.from("student_profiles").select("user_id, program_id, level_id").eq("user_id", data.student_user_id).maybeSingle(),
+    ]);
+    if (grpErr || offErr || stuErr) {
+      throw new Error("تعذر التحقق من بيانات الطرح والمجموعة والطالب");
+    }
     if (!grp || grp.offering_id !== data.offering_id) {
       throw new Error("المجموعة المحددة لا تتبع طرح المقرر المختار");
     }
-
-    const { data: existing } = await supabaseAdmin
-      .from("enrollments")
-      .select("id, group_id")
-      .eq("student_user_id", data.student_user_id)
-      .eq("offering_id", data.offering_id)
-      .maybeSingle();
-
-    if (existing && existing.group_id !== data.group_id) {
-      throw new Error("الطالب مسجل بالفعل في مجموعة أخرى لهذا المقرر في نفس الفصل؛ احذف التسجيل السابق أولًا إذا أردت تغييره");
+    if (!off || !stu) {
+      throw new Error("طرح المقرر أو ملف الطالب غير موجود");
+    }
+    if (data.status !== "dropped") {
+      if (off.program_id && stu.program_id !== off.program_id) {
+        throw new Error("البرنامج الأكاديمي للطالب لا يتوافق مع هذا الطرح");
+      }
+      if (off.level_id && stu.level_id !== off.level_id) {
+        throw new Error("المستوى الأكاديمي للطالب لا يتوافق مع هذا الطرح");
+      }
     }
 
-    const res = existing
+    const { data: activeExisting, error: activeErr } = await supabaseAdmin
+      .from("enrollments")
+      .select("id, group_id, status")
+      .eq("student_user_id", data.student_user_id)
+      .eq("offering_id", data.offering_id)
+      .in("status", ["enrolled", "completed"])
+      .maybeSingle();
+
+    if (activeErr) throw new Error("تعذر التحقق من تسجيلات الطالب السابقة");
+
+    if (activeExisting) {
+      if (activeExisting.group_id !== data.group_id) {
+        throw new Error("الطالب لديه تسجيل قائم بالفعل في مجموعة أخرى لهذا المقرر؛ قم بإسقاط التسجيل السابق أولًا للحفاظ على السجل التاريخي");
+      }
+      if (activeExisting.status === data.status) {
+        throw new Error("الطالب مسجل بالفعل في هذه المجموعة لنفس المقرر");
+      }
+    }
+
+    const res = activeExisting
       ? await supabaseAdmin
           .from("enrollments")
           .update({ group_id: data.group_id, status: data.status })
-          .eq("id", existing.id)
+          .eq("id", activeExisting.id)
           .select("*")
           .single()
       : await supabaseAdmin
@@ -904,9 +835,38 @@ export const adminEnrollStudent = createServerFn({ method: "POST" })
       action: "enroll_student",
       entityType: "enrollments",
       entityId: res.data.id,
-      metadata: { student_user_id: data.student_user_id, group_id: data.group_id },
+      metadata: { student_user_id: data.student_user_id, group_id: data.group_id, status: res.data.status },
     });
     return res.data;
+  });
+
+export const adminUpdateEnrollmentStatus = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d: unknown) =>
+    z.object({ id: z.string().uuid(), status: z.enum(["enrolled", "dropped", "completed"]) }).parse(d),
+  )
+  .handler(async ({ context, data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { logAdminActivity, requireAdminServer } = await import("./auth.server");
+    const admin = await requireAdminServer(context.userId);
+
+    const { data: updated, error } = await supabaseAdmin
+      .from("enrollments")
+      .update({ status: data.status })
+      .eq("id", data.id)
+      .select("*")
+      .single();
+
+    if (error || !updated) throw new Error(error?.message || "تعذر تحديث حالة التسجيل");
+
+    await logAdminActivity({
+      actorUserId: admin.userId,
+      actorLabel: admin.actorLabel,
+      action: `update_enrollment_${data.status}`,
+      entityType: "enrollments",
+      entityId: updated.id,
+    });
+    return updated;
   });
 
 export const adminRemoveEnrollment = createServerFn({ method: "POST" })
@@ -938,13 +898,31 @@ export const adminUpsertLecture = createServerFn({ method: "POST" })
         id: z.string().uuid().optional(),
         group_id: z.string().uuid(),
         day_of_week: z.enum(["Saturday", "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday"]),
-        start_hour: z.number().int().min(6).max(22),
-        end_hour: z.number().int().min(7).max(23),
+        start_time: z.string().trim().min(4).max(8),
+        end_time: z.string().trim().min(4).max(8),
         kind: z.enum(["lecture", "section", "lab"]),
         location: z.string().trim().min(1).max(120),
         instructor: z.string().trim().max(160).optional(),
       })
-      .refine((v) => v.end_hour > v.start_hour, "ساعة الانتهاء يجب أن تكون بعد ساعة البدء")
+      .superRefine((v, ctx) => {
+        try {
+          const sNorm = normalizeTimeString(v.start_time);
+          const eNorm = normalizeTimeString(v.end_time);
+          if (parseTimeToMinutes(eNorm) <= parseTimeToMinutes(sNorm)) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: ["end_time"],
+              message: "وقت الانتهاء يجب أن يكون بعد وقت البدء في نفس اليوم",
+            });
+          }
+        } catch (err) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["start_time"],
+            message: err instanceof Error ? err.message : "صيغة الوقت غير صالحة",
+          });
+        }
+      })
       .parse(d),
   )
   .handler(async ({ context, data }) => {
@@ -952,11 +930,20 @@ export const adminUpsertLecture = createServerFn({ method: "POST" })
     const { logAdminActivity, requireAdminServer } = await import("./auth.server");
     const admin = await requireAdminServer(context.userId);
 
+    const startTime = normalizeTimeString(data.start_time);
+    const endTime = normalizeTimeString(data.end_time);
+    const startMins = parseTimeToMinutes(startTime);
+    const endMins = parseTimeToMinutes(endTime);
+    const startHour = Math.floor(startMins / 60);
+    const endHour = Math.min(24, Math.max(startHour + 1, Math.ceil(endMins / 60)));
+
     const payload = {
       group_id: data.group_id,
       day_of_week: data.day_of_week,
-      start_hour: data.start_hour,
-      end_hour: data.end_hour,
+      start_time: startTime,
+      end_time: endTime,
+      start_hour: startHour,
+      end_hour: endHour,
       kind: data.kind,
       location: data.location,
       instructor: data.instructor || null,
@@ -972,6 +959,7 @@ export const adminUpsertLecture = createServerFn({ method: "POST" })
       action: data.id ? "update_lecture" : "create_lecture",
       entityType: "lectures",
       entityId: res.data.id,
+      metadata: { start_time: startTime, end_time: endTime },
     });
     return res.data;
   });
@@ -1105,6 +1093,8 @@ export const adminUpsertAnnouncement = createServerFn({ method: "POST" })
     const { logAdminActivity, requireAdminServer } = await import("./auth.server");
     const admin = await requireAdminServer(context.userId);
 
+    await assertProgramLevelMatch(data.program_id, data.level_id);
+
     const payload = {
       title: data.title,
       body: data.body,
@@ -1177,6 +1167,8 @@ export const adminUpsertAcademicEvent = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { logAdminActivity, requireAdminServer } = await import("./auth.server");
     const admin = await requireAdminServer(context.userId);
+
+    await assertProgramLevelMatch(data.program_id, data.level_id);
 
     const payload = {
       title: data.title,

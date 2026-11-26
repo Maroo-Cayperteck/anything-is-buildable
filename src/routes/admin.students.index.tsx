@@ -72,6 +72,9 @@ function AdminStudentsIndex() {
   const [rejectReason, setRejectReason] = useState("");
   const [rejecting, setRejecting] = useState(false);
 
+  // Per-request program/level overrides when approving non-roster applicants
+  const [reqAssign, setReqAssign] = useState<Record<string, { programId: string; levelId: string }>>({});
+
   const refreshAll = async () => {
     await Promise.all([
       qc.invalidateQueries({ queryKey: ["admin-students"] }),
@@ -208,6 +211,13 @@ function AdminStudentsIndex() {
             <div className="grid h-40 place-items-center">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
             </div>
+          ) : students.isError ? (
+            <div className="space-y-3 py-8 text-center">
+              <p className="text-sm text-destructive">تعذر تحميل قائمة الطلاب من قاعدة البيانات.</p>
+              <Button size="sm" variant="outline" onClick={() => students.refetch()}>
+                إعادة المحاولة
+              </Button>
+            </div>
           ) : (students.data?.items.length ?? 0) === 0 ? (
             <p className="py-10 text-center text-sm text-muted-foreground">لا يوجد طلاب مطابقون للبحث.</p>
           ) : (
@@ -268,31 +278,89 @@ function AdminStudentsIndex() {
 
       {tab === "requests" && (
         <Card title="طلبات تسجيل الطلاب الجدد" icon={UserCheck}>
-          {requests.length === 0 ? (
+          {rosterAndReqs.isError ? (
+            <div className="space-y-3 py-8 text-center">
+              <p className="text-sm text-destructive">تعذر تحميل طلبات التسجيل من قاعدة البيانات.</p>
+              <Button size="sm" variant="outline" onClick={() => rosterAndReqs.refetch()}>
+                إعادة المحاولة
+              </Button>
+            </div>
+          ) : requests.length === 0 ? (
             <p className="py-10 text-center text-sm text-muted-foreground">لا توجد طلبات تسجيل حاليًا.</p>
           ) : (
             <div className="divide-y">
               {requests.map((r) => {
                 const badge = STATUS_AR[r.status] ?? { label: r.status, cls: "bg-muted" };
+                const assign = reqAssign[r.id] ?? { programId: "", levelId: "" };
+                const filteredLevels = assign.programId
+                  ? levels.filter((l) => l.program_id === assign.programId)
+                  : levels;
                 return (
                   <div key={r.id} className="flex flex-wrap items-center justify-between gap-4 py-4">
                     <div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <span className="font-semibold">{r.full_name_ar}</span>
                         <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${badge.cls}`}>{badge.label}</span>
+                        {"roster_verified" in r && !r.roster_verified && (
+                          <span className="rounded-full bg-secondary px-2.5 py-0.5 text-xs text-muted-foreground">
+                            يتطلب مراجعة يدوية (غير مدرج بالكشف)
+                          </span>
+                        )}
                       </div>
                       <div className="mt-1 font-mono text-xs text-muted-foreground" dir="ltr">
                         {r.student_code} · {r.email} {r.phone ? `· ${r.phone}` : ""}
                       </div>
                     </div>
                     {r.status === "pending" && (
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <select
+                          aria-label={`البرنامج للطالب ${r.student_code}`}
+                          className="rounded-lg border bg-background px-2.5 py-1.5 text-xs"
+                          value={assign.programId}
+                          onChange={(e) =>
+                            setReqAssign((prev) => ({
+                              ...prev,
+                              [r.id]: { programId: e.target.value, levelId: "" },
+                            }))
+                          }
+                        >
+                          <option value="">البرنامج (من الكشف / افتراضي)</option>
+                          {programs.map((pr) => (
+                            <option key={pr.id} value={pr.id}>
+                              {pr.name_ar}
+                            </option>
+                          ))}
+                        </select>
+                        <select
+                          aria-label={`المستوى للطالب ${r.student_code}`}
+                          className="rounded-lg border bg-background px-2.5 py-1.5 text-xs"
+                          value={assign.levelId}
+                          onChange={(e) =>
+                            setReqAssign((prev) => ({
+                              ...prev,
+                              [r.id]: { programId: assign.programId, levelId: e.target.value },
+                            }))
+                          }
+                        >
+                          <option value="">المستوى (اختياري)</option>
+                          {filteredLevels.map((lv) => (
+                            <option key={lv.id} value={lv.id}>
+                              {lv.name_ar}
+                            </option>
+                          ))}
+                        </select>
                         <Button
                           size="sm"
                           variant="brand"
                           onClick={async () => {
                             try {
-                              await adminApproveRegistration({ data: { requestId: r.id } });
+                              await adminApproveRegistration({
+                                data: {
+                                  requestId: r.id,
+                                  programId: assign.programId || null,
+                                  levelId: assign.levelId || null,
+                                },
+                              });
                               await refreshAll();
                               toast.success(`تم اعتماد حساب الطالب ${r.student_code}`);
                             } catch (err) {

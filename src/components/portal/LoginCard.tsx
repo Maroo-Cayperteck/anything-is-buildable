@@ -13,11 +13,15 @@ const schema = z.object({
 export function LoginCard({
   title,
   subtitle,
+  identifierLabel = "اسم المستخدم أو البريد الإلكتروني",
+  identifierPlaceholder,
   onSubmit,
   footer,
 }: {
   title: string;
   subtitle: string;
+  identifierLabel?: string;
+  identifierPlaceholder?: string;
   onSubmit: (u: string, p: string) => Promise<string | null>;
   footer?: React.ReactNode;
 }) {
@@ -67,7 +71,7 @@ export function LoginCard({
         </div>
         <form onSubmit={handle} noValidate className="mt-8 space-y-5">
           <div>
-            <label htmlFor="username" className="mb-1.5 block text-sm font-medium">اسم المستخدم</label>
+            <label htmlFor="username" className="mb-1.5 block text-sm font-medium">{identifierLabel}</label>
             <div className="relative flex items-center">
               <User className="pointer-events-none absolute top-1/2 right-3.5 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <input
@@ -75,6 +79,7 @@ export function LoginCard({
                 name="username"
                 dir="ltr"
                 autoComplete="username"
+                placeholder={identifierPlaceholder}
                 className={cn(inputCls(errors.username), "!pr-11 !pl-4 font-mono")}
               />
             </div>

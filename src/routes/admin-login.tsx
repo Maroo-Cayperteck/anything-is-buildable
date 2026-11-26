@@ -23,7 +23,9 @@ function AdminLogin() {
   return (
     <LoginCard
       title="بوابة المسؤول"
-      subtitle="إدارة ملفات الطلاب"
+      subtitle="إدارة نظام وشؤون الطلاب"
+      identifierLabel="البريد الإلكتروني أو اسم المستخدم للمسؤول"
+      identifierPlaceholder="admin@hnu.edu.eg"
       onSubmit={async (u, p) => {
         const { error, role } = await portalSignIn(u, p);
         if (error) return error;

@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { CalendarDays, Megaphone } from "lucide-react";
+import { CalendarDays, Loader2, Megaphone } from "lucide-react";
 import { Card } from "@/components/portal/Shell";
+import { Button } from "@/components/ui/button";
 import { EVENT_KIND_LABEL } from "@/lib/portal-data";
 import { usePortalSnapshot } from "@/lib/use-profile";
 
@@ -15,9 +16,26 @@ export const Route = createFileRoute("/portal/events")({
 });
 
 function StudentEventsPage() {
-  const { data: snap } = usePortalSnapshot();
-  const announcements = snap?.announcements ?? [];
-  const events = snap?.events ?? [];
+  const { data: snap, isLoading, isError, refetch } = usePortalSnapshot();
+  if (isLoading) {
+    return (
+      <div className="grid h-64 place-items-center text-muted-foreground">
+        <Loader2 className="h-6 w-6 animate-spin" />
+      </div>
+    );
+  }
+  if (isError || !snap) {
+    return (
+      <div className="space-y-4 rounded-xl border bg-card p-8 text-center">
+        <p className="text-destructive">تعذر تحميل الإعلانات والفعاليات.</p>
+        <Button variant="outline" onClick={() => refetch()}>
+          إعادة المحاولة
+        </Button>
+      </div>
+    );
+  }
+  const announcements = snap.announcements;
+  const events = snap.events;
 
   return (
     <div className="space-y-6">

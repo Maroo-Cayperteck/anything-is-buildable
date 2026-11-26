@@ -1,7 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { Award, ChevronDown, Clock, GraduationCap, Info, TrendingUp } from "lucide-react";
+import { Award, ChevronDown, Clock, GraduationCap, Info, Loader2, TrendingUp } from "lucide-react";
 import { GradePill, StatCard } from "@/components/portal/Shell";
+import { Button } from "@/components/ui/button";
 import { GPA_SCALE } from "@/lib/portal-data";
 import { usePortalSnapshot } from "@/lib/use-profile";
 import { cn } from "@/lib/utils";
@@ -17,11 +18,30 @@ export const Route = createFileRoute("/portal/grades")({
 });
 
 function Grades() {
-  const { data: snap } = usePortalSnapshot();
-  const p = snap!.profile;
-  const grades = snap!.grades;
-  const summaries = snap!.gradeSummaries;
+  const { data: snap, isLoading, isError, refetch } = usePortalSnapshot();
   const [scaleOpen, setScaleOpen] = useState(false);
+
+  if (isLoading) {
+    return (
+      <div className="grid h-64 place-items-center text-muted-foreground">
+        <Loader2 className="h-6 w-6 animate-spin" />
+      </div>
+    );
+  }
+  if (isError || !snap) {
+    return (
+      <div className="space-y-4 rounded-xl border bg-card p-8 text-center">
+        <p className="text-destructive">تعذر تحميل النتائج الأكاديمية.</p>
+        <Button variant="outline" onClick={() => refetch()}>
+          إعادة المحاولة
+        </Button>
+      </div>
+    );
+  }
+
+  const p = snap.profile;
+  const grades = snap.grades;
+  const summaries = snap.gradeSummaries;
 
   const groupedBySemester = new Map<
     string,

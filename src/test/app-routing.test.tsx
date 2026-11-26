@@ -8,6 +8,7 @@ describe("App routing", () => {
   const routes = [
     "/",
     "/register",
+    "/auth/callback",
     "/admin-login",
     "/portal",
     "/portal/info",

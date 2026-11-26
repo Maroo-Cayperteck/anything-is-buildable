@@ -416,34 +416,85 @@ export type Database = {
           created_at: string;
           day_of_week: string;
           end_hour: number;
+          end_time: string;
           group_id: string;
           id: string;
           instructor: string | null;
           kind: Database["public"]["Enums"]["slot_kind"];
           location: string;
           start_hour: number;
+          start_time: string;
         };
         Insert: {
           created_at?: string;
           day_of_week: string;
-          end_hour: number;
+          end_hour?: number;
+          end_time: string;
           group_id: string;
           id?: string;
           instructor?: string | null;
           kind?: Database["public"]["Enums"]["slot_kind"];
           location: string;
-          start_hour: number;
+          start_hour?: number;
+          start_time: string;
         };
         Update: {
           created_at?: string;
           day_of_week?: string;
           end_hour?: number;
+          end_time?: string;
           group_id?: string;
           id?: string;
           instructor?: string | null;
           kind?: Database["public"]["Enums"]["slot_kind"];
           location?: string;
           start_hour?: number;
+          start_time?: string;
+        };
+        Relationships: [];
+      };
+      registration_intents: {
+        Row: {
+          consumed_at: string | null;
+          consumed_by_user_id: string | null;
+          created_at: string;
+          email: string;
+          expires_at: string;
+          full_name_ar: string;
+          full_name_en: string | null;
+          gender: string | null;
+          id: string;
+          phone: string | null;
+          roster_id: string | null;
+          student_code: string;
+        };
+        Insert: {
+          consumed_at?: string | null;
+          consumed_by_user_id?: string | null;
+          created_at?: string;
+          email: string;
+          expires_at?: string;
+          full_name_ar: string;
+          full_name_en?: string | null;
+          gender?: string | null;
+          id?: string;
+          phone?: string | null;
+          roster_id?: string | null;
+          student_code: string;
+        };
+        Update: {
+          consumed_at?: string | null;
+          consumed_by_user_id?: string | null;
+          created_at?: string;
+          email?: string;
+          expires_at?: string;
+          full_name_ar?: string;
+          full_name_en?: string | null;
+          gender?: string | null;
+          id?: string;
+          phone?: string | null;
+          roster_id?: string | null;
+          student_code?: string;
         };
         Relationships: [];
       };
@@ -461,6 +512,7 @@ export type Database = {
           reviewed_at: string | null;
           reviewed_by: string | null;
           roster_id: string | null;
+          roster_verified: boolean;
           status: Database["public"]["Enums"]["account_status"];
           student_code: string;
           updated_at: string;
@@ -478,6 +530,7 @@ export type Database = {
           reviewed_at?: string | null;
           reviewed_by?: string | null;
           roster_id?: string | null;
+          roster_verified?: boolean;
           status?: Database["public"]["Enums"]["account_status"];
           student_code: string;
           updated_at?: string;
@@ -495,6 +548,7 @@ export type Database = {
           reviewed_at?: string | null;
           reviewed_by?: string | null;
           roster_id?: string | null;
+          roster_verified?: boolean;
           status?: Database["public"]["Enums"]["account_status"];
           student_code?: string;
           updated_at?: string;
@@ -564,6 +618,39 @@ export type Database = {
           name_ar?: string;
           season?: string;
           starts_on?: string | null;
+        };
+        Relationships: [];
+      };
+      storage_cleanup_queue: {
+        Row: {
+          attempts: number;
+          bucket: string;
+          created_at: string;
+          id: string;
+          last_error: string | null;
+          reason: string | null;
+          resolved_at: string | null;
+          storage_path: string;
+        };
+        Insert: {
+          attempts?: number;
+          bucket: string;
+          created_at?: string;
+          id?: string;
+          last_error?: string | null;
+          reason?: string | null;
+          resolved_at?: string | null;
+          storage_path: string;
+        };
+        Update: {
+          attempts?: number;
+          bucket?: string;
+          created_at?: string;
+          id?: string;
+          last_error?: string | null;
+          reason?: string | null;
+          resolved_at?: string | null;
+          storage_path?: string;
         };
         Relationships: [];
       };
@@ -791,6 +878,63 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      resolve_login_email: {
+        Args: { p_identifier: string };
+        Returns: string | null;
+      };
+      admin_approve_registration_atomic: {
+        Args: {
+          _academic_year_id?: string | null;
+          _actor_label: string;
+          _actor_user_id: string;
+          _level_id?: string | null;
+          _program_id?: string | null;
+          _request_id: string;
+        };
+        Returns: Json;
+      };
+      admin_reject_registration_atomic: {
+        Args: {
+          _actor_label: string;
+          _actor_user_id: string;
+          _reason?: string | null;
+          _request_id: string;
+        };
+        Returns: Json;
+      };
+      admin_set_account_status_atomic: {
+        Args: {
+          _actor_label: string;
+          _actor_user_id: string;
+          _new_status: Database["public"]["Enums"]["account_status"];
+          _reason?: string | null;
+          _target_user_id: string;
+        };
+        Returns: Json;
+      };
+      admin_upsert_academic_year_atomic: {
+        Args: {
+          _actor_label: string;
+          _actor_user_id: string;
+          _id: string | null;
+          _is_current: boolean;
+          _name: string;
+        };
+        Returns: Database["public"]["Tables"]["academic_years"]["Row"];
+      };
+      admin_upsert_semester_atomic: {
+        Args: {
+          _academic_year_id: string;
+          _actor_label: string;
+          _actor_user_id: string;
+          _id: string | null;
+          _is_closed: boolean;
+          _is_current: boolean;
+          _name_ar: string;
+          _season: string;
+        };
+        Returns: Database["public"]["Tables"]["semesters"]["Row"];
+      };
       can_access_audience: {
         Args: {
           _audience: Database["public"]["Enums"]["document_audience"];
