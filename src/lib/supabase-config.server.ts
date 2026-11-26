@@ -18,9 +18,15 @@ function normalizeHost(rawUrl: string | undefined): string | null {
 }
 
 export function validateServerSupabaseConfig(options?: { requireServiceRole?: boolean }) {
-  const url = process.env["SUPABASE_URL"]?.trim();
-  const publishableKey = process.env["SUPABASE_PUBLISHABLE_KEY"]?.trim();
-  const serviceRoleKey = process.env["SUPABASE_SERVICE_ROLE_KEY"]?.trim();
+  // Lovable / Cloudflare Workers injects env vars as VITE_* at build time.
+  // Fall back to VITE_* names so the server function works in all environments.
+  const url = (process.env["SUPABASE_URL"] || process.env["VITE_SUPABASE_URL"])?.trim();
+  const publishableKey = (
+    process.env["SUPABASE_PUBLISHABLE_KEY"] || process.env["VITE_SUPABASE_PUBLISHABLE_KEY"]
+  )?.trim();
+  const serviceRoleKey = (
+    process.env["SUPABASE_SERVICE_ROLE_KEY"] || process.env["VITE_SUPABASE_SERVICE_ROLE_KEY"]
+  )?.trim();
 
   const missing: string[] = [];
   if (!url) missing.push("SUPABASE_URL");
