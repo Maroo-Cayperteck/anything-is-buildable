@@ -17,17 +17,37 @@ function normalizeHost(rawUrl: string | undefined): string | null {
   }
 }
 
+const DEFAULT_SUPABASE_URL = "https://c--7a3227c2-0b50-46fd-8553-4a7c75a87e82-prod.lovable.cloud";
+const DEFAULT_SUPABASE_KEY = "sb_publishable_Kvx_6UA621xXgMV-u3OzEA_BG2k_EsT";
+
 function readVitePublicEnv(
   key: "VITE_SUPABASE_URL" | "VITE_SUPABASE_PUBLISHABLE_KEY",
 ): string | undefined {
-  const fromProcess = process.env[key]?.trim();
-  if (fromProcess) return fromProcess;
-  try {
-    const metaEnv = import.meta.env as Record<string, string | undefined> | undefined;
-    return metaEnv?.[key]?.trim() || undefined;
-  } catch {
-    return undefined;
+  if (key === "VITE_SUPABASE_URL") {
+    const fromProc = process.env["SUPABASE_URL"]?.trim() || process.env["VITE_SUPABASE_URL"]?.trim();
+    if (fromProc) return fromProc;
+    try {
+      const fromMeta = import.meta.env?.["VITE_SUPABASE_URL"];
+      if (typeof fromMeta === "string" && fromMeta.trim()) {
+        return fromMeta.trim();
+      }
+    } catch {}
+    return DEFAULT_SUPABASE_URL;
   }
+  if (key === "VITE_SUPABASE_PUBLISHABLE_KEY") {
+    const fromProc =
+      process.env["SUPABASE_PUBLISHABLE_KEY"]?.trim() ||
+      process.env["VITE_SUPABASE_PUBLISHABLE_KEY"]?.trim();
+    if (fromProc) return fromProc;
+    try {
+      const fromMeta = import.meta.env?.["VITE_SUPABASE_PUBLISHABLE_KEY"];
+      if (typeof fromMeta === "string" && fromMeta.trim()) {
+        return fromMeta.trim();
+      }
+    } catch {}
+    return DEFAULT_SUPABASE_KEY;
+  }
+  return undefined;
 }
 
 export function validateServerSupabaseConfig(options?: { requireServiceRole?: boolean }) {
