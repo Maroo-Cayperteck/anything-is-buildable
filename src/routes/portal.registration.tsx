@@ -40,7 +40,7 @@ function Registration() {
           <div>
             <div className="font-semibold">{p.full_name_ar}</div>
             <div className="text-sm text-muted-foreground">
-              الرقم الجامعي: <span className="font-mono">{p.student_code}</span> · المعدل: {Number(p.cgpa).toFixed(3)}
+              الرقم الجامعي: <span className="font-mono">{p.student_code}</span> · المعدل: {Number(p.cgpa).toFixed(2)}
             </div>
           </div>
           <span className="mr-auto rounded-full bg-success-soft px-3 py-1 text-xs font-semibold text-success">التسجيل معتمد</span>

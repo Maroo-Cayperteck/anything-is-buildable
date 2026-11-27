@@ -1,4 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { Button } from "@/components/ui/button";
 import { LoginCard } from "@/components/portal/LoginCard";
 import { fetchRoles, getDemoSession, portalSignIn, type Role } from "@/lib/session";
 import { supabase } from "@/integrations/supabase/client";
@@ -54,9 +55,9 @@ function AdminLogin() {
       }}
       footer={
         <div className="space-y-3">
-          <Link to="/" className="inline-block text-xs font-semibold text-primary hover:underline">
-            العودة لدخول الطلاب
-          </Link>
+          <Button asChild variant="brand" size="lg" className="h-12 w-full text-base">
+            <Link to="/">العودة لدخول الطلاب</Link>
+          </Button>
           <div className="border-t pt-2">
             <a
               href="https://www.facebook.com/HNU.Helwan"

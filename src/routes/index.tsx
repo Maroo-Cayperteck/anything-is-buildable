@@ -1,4 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { Button } from "@/components/ui/button";
 import { LoginCard } from "@/components/portal/LoginCard";
 import { portalSignIn, fetchRoles, getDemoSession, type Role } from "@/lib/session";
 import { supabase } from "@/integrations/supabase/client";
@@ -58,9 +59,9 @@ function Login() {
             <div className="mt-0.5 text-xs font-medium text-muted-foreground">Student Information System</div>
           </a>
           <div className="pt-1">
-            <Link to="/admin-login" className="inline-block text-xs font-semibold text-primary hover:underline">
-              دخول المسؤول
-            </Link>
+            <Button asChild variant="brand" size="lg" className="h-12 w-full text-base">
+              <Link to="/admin-login">دخول المسؤول</Link>
+            </Button>
           </div>
         </div>
       }

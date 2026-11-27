@@ -104,7 +104,7 @@ function Grades() {
               </div>
               <div>
                 <div className="label-caps">التراكمي</div>
-                المعدل التراكمي: <b className="text-danger">{t.cumulative.cgpa}</b> · الساعات: <b>{t.cumulative.hours}</b> · المستوى: <b>{t.cumulative.level}</b>
+                المعدل التراكمي: <b className="text-danger">{t.cumulative.cgpa.toFixed(2)}</b> · الساعات: <b>{t.cumulative.hours}</b> · المستوى: <b>{t.cumulative.level}</b>
               </div>
             </div>
           )}
